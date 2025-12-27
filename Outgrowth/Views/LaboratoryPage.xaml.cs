@@ -1,21 +1,36 @@
 using Outgrowth.ViewModels;
+using Outgrowth.Models;
 using System.Linq;
+#if WINDOWS
+using Outgrowth.Platforms.Windows;
+#endif
 
 namespace Outgrowth.Views;
 
 public partial class LaboratoryPage : ContentPage
 {
-    // Element coordinates (1:1 pixel ratio, container center: X=960, Y=540)
-    private readonly (int X, int Y, string Name)[] _elementCoordinates = 
+    // Station objects - created dynamically on page load
+    private readonly List<StationObject> _stationObjects = new()
     {
-        (0, 200, "ResourceSlot"),   // Center, above
-        (0, -200, "Extract")        // Center, below
+        new StationObject("ResourceSlot", "Resource Slot", 0, 200, 300, 300, "🌾", Color.FromArgb("#4A4A4A")),
+        new StationObject("Extract", "Extract", 0, -200, 250, 250, "⚗️", Color.FromArgb("#2C1A5F"))
     };
+    
+#if WINDOWS
+    private WindowsInput? _windowsInput;
+#endif
     
     public LaboratoryPage()
     {
         InitializeComponent();
         BindingContext = new LaboratoryViewModel();
+        
+        // Set up station object click handlers
+        _stationObjects[0].Clicked += (s, e) => OnResourceSlotClicked(s ?? this, e);
+        _stationObjects[0].InteractAction = () => System.Diagnostics.Debug.WriteLine("Resource Slot interacted");
+        
+        _stationObjects[1].Clicked += (s, e) => OnExtractClicked(s ?? this, e);
+        _stationObjects[1].InteractAction = () => System.Diagnostics.Debug.WriteLine("Extract interacted");
         
         // Handle page size changes for scaling
         this.SizeChanged += OnPageSizeChanged;
@@ -29,13 +44,31 @@ public partial class LaboratoryPage : ContentPage
     
     private void OnPageLoaded(object? sender, EventArgs e)
     {
+        // Create station objects and add to environment
+        CreateStationObjects();
         // Initialize element positions from absolute coordinates
-        UpdateElementPositions();
+        UpdateStationPositions();
+        
+#if WINDOWS
+        // Attach Windows keyboard input handler (only Esc for closing panels)
+        _windowsInput = new WindowsInput(
+            onLeftArrow: () => { }, // No action
+            onRightArrow: () => { }, // No action
+            onEscape: CloseResourcePanel  // Close panel with Esc key
+        );
+        _windowsInput.Attach();
+#endif
     }
     
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
         CloseResourcePanel();
+        
+#if WINDOWS
+        // Detach Windows keyboard input handler
+        _windowsInput?.Detach();
+        _windowsInput = null;
+#endif
     }
 
     private void OnPageSizeChanged(object? sender, EventArgs e)
@@ -98,8 +131,8 @@ public partial class LaboratoryPage : ContentPage
                 ResourceListPlaceholder.AnchorY = 0.5;
                 ResourceListPlaceholder.Scale = scale;
                 
-                // Update element positions from absolute coordinates
-                UpdateElementPositions();
+                // Update station object positions from absolute coordinates
+                UpdateStationPositions();
                 
                 // Font scale: based on screen width (1920px = scale 1.0)
                 const double windowsBaseWidth = 1920.0;
@@ -146,10 +179,26 @@ public partial class LaboratoryPage : ContentPage
     }
 
     /// <summary>
-    /// Updates element positions using 1:1 coordinate system (container center: X=960, Y=540)
-    /// Converts center coordinates to top-left corner for AbsoluteLayout
+    /// Creates station object UI elements and adds them to EnvironmentContainer
     /// </summary>
-    private void UpdateElementPositions()
+    private void CreateStationObjects()
+    {
+#if ANDROID || WINDOWS
+        if (EnvironmentContainer == null)
+            return;
+        
+        foreach (var station in _stationObjects)
+        {
+            var visualElement = station.CreateVisualElement();
+            EnvironmentContainer.Children.Add(visualElement);
+        }
+#endif
+    }
+    
+    /// <summary>
+    /// Updates station positions using 1:1 coordinate system (container center: X=960, Y=540)
+    /// </summary>
+    private void UpdateStationPositions()
     {
 #if ANDROID || WINDOWS
         if (EnvironmentContainer == null)
@@ -158,32 +207,9 @@ public partial class LaboratoryPage : ContentPage
         const double containerCenterX = 960.0;
         const double containerCenterY = 540.0;
         
-        foreach (var (logicalX, logicalY, name) in _elementCoordinates)
+        foreach (var station in _stationObjects)
         {
-            VerticalStackLayout? element = name switch
-            {
-                "ResourceSlot" => FindByName("ResourceSlotButton") as VerticalStackLayout,
-                "Extract" => FindByName("ExtractButton") as VerticalStackLayout,
-                _ => null
-            };
-            
-            if (element == null)
-                continue;
-            
-            // Convert center coordinates to pixel positions (1:1 ratio)
-            double centerPixelX = containerCenterX + logicalX;
-            double centerPixelY = containerCenterY - logicalY; // Negative Y = below
-            
-            // Element dimensions (Extract is 250x250, ResourceSlot is 300x300)
-            double elementHalfWidth = (name == "Extract") ? 125.0 : 150.0;
-            double elementHalfHeight = (name == "Extract") ? 125.0 : 150.0;
-            
-            // Convert to top-left corner for AbsoluteLayout
-            double leftEdgeX = centerPixelX - elementHalfWidth;
-            double topEdgeY = centerPixelY - elementHalfHeight;
-            
-            AbsoluteLayout.SetLayoutBounds(element, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-            AbsoluteLayout.SetLayoutFlags(element, 0);
+            station.UpdatePosition(containerCenterX, containerCenterY);
         }
 #endif
     }
@@ -208,14 +234,16 @@ public partial class LaboratoryPage : ContentPage
 #endif
     }
 
-    private void OnExtractClicked(object sender, EventArgs e)
+    private void OnExtractClicked(object? sender, EventArgs e)
     {
         // TODO: Implement extract functionality
+        System.Diagnostics.Debug.WriteLine("Extract button clicked");
     }
 
     private void OnBackgroundOverlayTapped(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
+#if ANDROID
+        // Only close panel on tap for Android (Windows uses Esc key)
         CloseResourcePanel();
 #endif
     }

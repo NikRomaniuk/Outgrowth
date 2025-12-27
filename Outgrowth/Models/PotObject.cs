@@ -1,22 +1,27 @@
 namespace Outgrowth.Models;
 
 /// <summary>
-/// Pot object for the greenhouse - creates pot UI with icon, label, and separator
+/// Interactive pot for the greenhouse. Clickable with icon, label, and separator.
 /// </summary>
-public class PotObject : EnvObject
+public class PotObject : EnvObject, IInteractable
 {
     public int PotNumber { get; set; }
-    public EventHandler<TappedEventArgs>? OnClick { get; set; }
+    public event EventHandler<TappedEventArgs>? Clicked;
+    public Action? InteractAction { get; set; }
+    public bool CanInteract { get; set; } = true;
     
     public PotObject(int potNumber, int x, int y) 
-        : base(x, y, 300, 300) // Pots are 300x300 pixels
+        : base($"Pot{potNumber}", x, y, 300, 300, "🪴")
     {
         PotNumber = potNumber;
     }
     
-    /// <summary>
-    /// Creates the pot UI element (border with icon, separator line, and label)
-    /// </summary>
+    public void OnInteract()
+    {
+        if (!CanInteract) return;
+        InteractAction?.Invoke();
+    }
+    
     public override View CreateVisualElement()
     {
         var stackLayout = new VerticalStackLayout { Spacing = 10 };
@@ -30,19 +35,21 @@ public class PotObject : EnvObject
             WidthRequest = 300
         };
         
-        if (OnClick != null)
+        // Add tap gesture for interactivity
+        var tapGesture = new TapGestureRecognizer();
+        tapGesture.Tapped += (sender, e) =>
         {
-            var tapGesture = new TapGestureRecognizer();
-            tapGesture.Tapped += OnClick;
-            border.GestureRecognizers.Add(tapGesture);
-        }
+            Clicked?.Invoke(sender, e);
+            OnInteract();
+        };
+        border.GestureRecognizers.Add(tapGesture);
         
         var grid = new Grid();
         grid.Children.Add(new BoxView { Color = Color.FromArgb("#5D4037"), CornerRadius = 10, Opacity = 0.5 });
         
         var iconLabel = new Label
         {
-            Text = "🪴",
+            Text = BaseSprite,
             HorizontalOptions = LayoutOptions.Center,
             VerticalOptions = LayoutOptions.Center
         };

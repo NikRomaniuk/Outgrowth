@@ -13,24 +13,16 @@
 - **🌿 Greenhouse**: Cultivation area for growing and maintaining your plant collection
 - **🔬 Laboratory**: Research facility for breeding, genetic modification, and chemical extraction
 
-### Gameplay Systems
-- **Cultivation**: Growing, watering, and harvesting plants (coming soon)
-- **Breeding**: Cross-breeding to create new plant varieties (coming soon)
-- **Trading**: Exchange resources with other space platforms (coming soon)
-- **Research**: Unlock new extracts (coming soon)
-- **Quests**: Complete missions and objectives (coming soon)
-- **Expeditions**: Explore and gather resources (coming soon)
+### Gameplay Systems (Planned)
+- Cultivation, breeding, trading, research, quests, and expeditions
 
-## 🛠️ Technical Details
+## 🛠️ Tech Stack
 
-- **Framework**: .NET 9.0 MAUI
+- **Framework**: .NET 9.0 MAUI (standard libraries only)
 - **Platforms**: Windows & Android
-- **Architecture**: MVVM (Model-View-ViewModel)
-- **Data Persistence**: JSON-based local storage
-- **Language**: C#
-- **Display**: 16:9 aspect ratio (landscape only)
-- **Android**: SensorLandscape orientation (rotates between landscape orientations)
-- **Windows**: Non-resizable window (windowed fullscreen)
+- **Architecture**: MVVM with data binding
+- **Storage**: JSON files in local app data
+- **Display**: 16:9 landscape (immersive fullscreen on Android)
 
 ## 📁 Project Structure
 
@@ -47,8 +39,11 @@ Outgrowth/
 │   ├── GreenhouseViewModel.cs # Greenhouse logic
 │   └── LaboratoryViewModel.cs # Laboratory logic
 ├── Models/               # Data models and environment objects
-│   ├── EnvObject.cs      # Base class for environment objects
-│   └── PotObject.cs      # Pot object implementation
+│   ├── EnvObject.cs      # Base class for all environment objects
+│   ├── PotObject.cs      # Interactive pot implementation
+│   ├── StationObject.cs  # Interactive station elements
+│   ├── FurnitureObject.cs # Decorative furniture
+│   └── AnimatedPotObject.cs # Animated pot with pulse effect
 ├── Services/             # Business logic (coming soon)
 ├── Platforms/            # Platform-specific code
 └── Resources/            # Images, fonts, styles, and other assets
@@ -63,82 +58,58 @@ Outgrowth/
 - Windows 10/11 (for Windows development)
 - Android SDK (for Android development)
 
-### Building & Running
+### Quick Start
 
 ```bash
-# Clone the repository
 git clone [repository-url]
-
-# Navigate to the project
 cd Outgrowth
-
-# Restore packages
 dotnet restore
-
-# Build the project
 dotnet build
 
 # Run on Windows
 dotnet build -f net9.0-windows
 
-# Run on Android
+# Run on Android  
 dotnet build -f net9.0-android
 ```
 
 ## 📚 Documentation
 
-For detailed information about the project architecture and implementation details, see:
-
-- **[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)** - Comprehensive project documentation
+- **[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)** - Full project documentation
+- **[ENVIRONMENT_OBJECTS_ARCHITECTURE.md](ENVIRONMENT_OBJECTS_ARCHITECTURE.md)** - Environment object system architecture
 
 ## ✨ Features
 
 ### Currently Implemented
 - ✅ Cross-platform foundation (Windows & Android)
 - ✅ MVVM architecture with data binding
-- ✅ Complete navigation system
-- ✅ Main Menu with game launcher interface
-- ✅ Hub (Command Center) page with interactive environment
-  - Interactive elements (Market, Quest Console, Statistics) with overlay panels
-  - Navigation buttons to Greenhouse and Laboratory
-  - Consistent 16:9 layout across platforms
-- ✅ Greenhouse page with complete layout and navigation
-  - Dynamic pot system using `PotObject` instances (pots created programmatically, not hardcoded)
-  - 5 pots with navigation system (Android only: left/right arrows, restricted to middle 3 pots)
-  - ToolsPanel and MovePanel with automatic scaling
-  - Side panels for liquids and seeds (mutually exclusive)
-  - Hub navigation button
-- ✅ Laboratory page with interactive environment
-  - Resource slot and extract button
-  - Scrollable resource list panel
-  - Automatic scaling for different screen sizes
-- ✅ MVVM architecture with BaseViewModel and individual ViewModels
-- ✅ Generic environment object system (`EnvObject` base class for pots and future furniture)
-- ✅ Responsive design with automatic scaling for Android and Windows
+- ✅ Complete navigation system (Main Menu → Hub → Greenhouse/Laboratory)
+- ✅ **Hub Page**: Interactive command center with Market, Quest Console, Statistics
+- ✅ **Greenhouse Page**: Dynamic pot system (5 pots, navigation on Android), resource panels
+- ✅ **Laboratory Page**: Research interface with resource management
+- ✅ **Environment Object System**: Extensible architecture with `EnvObject` base class
+  - `PotObject` - Interactive pots with click handlers
+  - `StationObject` - Interactive station elements (market, consoles, etc.)
+  - `FurnitureObject` - Decorative furniture items
+  - `AnimatedPotObject` - Pots with pulse animation
+  - Interfaces: `IInteractable`, `IAnimated` for extensibility
+- ✅ Responsive design with automatic scaling (16:9 aspect ratio)
 - ✅ Android immersive fullscreen mode
 
-### Planned (In Development)
-- ⏳ Plant data models and genetics system
-- ⏳ Cultivation mechanics (growing, watering, harvesting)
-- ⏳ Breeding system with trait inheritance
-- ⏳ Chemical extraction and reagent system
-- ⏳ Research progression
-- ⏳ Trading system
-- ⏳ Quest and mission system
-- ⏳ Expedition mechanics
-- ⏳ Save/Load game functionality
-- ⏳ Settings page
+### Coming Soon
+- Plant genetics and cultivation mechanics
+- Breeding system with trait inheritance
+- Research progression and chemical extraction
+- Trading, quests, and expeditions
+- Save/Load functionality
 
-## 🎨 Design Philosophy
+## 🎨 Design
 
-- **Calm & Methodical**: Relaxing gameplay focused on careful planning
-- **Scientific Approach**: Realistic genetics simulation (simplified Mendelian inheritance)
-- **Solo Experience**: Single-player focused, no multiplayer pressure
-- **Space Atmosphere**: Sci-fi terminal aesthetic with ambient visuals
+Calm, methodical gameplay with a scientific approach to plant breeding. Solo experience in a space station atmosphere-
 
-## 📝 Academic Context
+## 📝 Academic Project
 
-This project is being developed as part of the ATU Year 2 Software Development course (BSc in Computing)
+Developed for ATU Year 2 Software Development (BSc Computing)
 
 ## 📄 License
 
@@ -146,19 +117,9 @@ This is an educational project. All rights reserved
 
 ## 👤 Author
 
-**Nik Romaniuk**
-- GitHub: [@NikRomaniuk](https://github.com/NikRomaniuk)
-
-## 🙏 Acknowledgments
-
-- Instructor: DonH-ITS (on GitHub)
-- Course: BSc Computing in Software Development - Year 2
-- Institution: Atlantic Technical University
-- Framework: .NET MAUI by Microsoft
+**Nik Romaniuk** - [@NikRomaniuk](https://github.com/NikRomaniuk)
 
 ---
 
-**Status**: 🚧 In Active Development
-
-**Last Updated**: December 26, 2025
+**Status**: 🚧 In Active Development | **Last Updated**: December 26, 2025
 

@@ -72,91 +72,12 @@
             <!-- Environment container with 16:9 aspect ratio - scales based on screen height -->
             <!-- Container width: 1920 pixels (19.2 * 100) for coordinate system -100 to 100 -->
             <!-- Container height: 1080 pixels (10.8 * 100) for coordinate system -100 to 100 -->
+            <!-- Station objects (Resource Slot, Extract) are created dynamically in code-behind -->
             <AbsoluteLayout x:Name="EnvironmentContainer"
                            WidthRequest="1920"
                            HeightRequest="1080"
                            HorizontalOptions="Fill"
                            VerticalOptions="Fill">
-            
-            <!-- Resource Slot Button - Position set programmatically from absolute coordinates (X=0, Y=-20) -->
-            <VerticalStackLayout x:Name="ResourceSlotButton"
-                                AbsoluteLayout.LayoutBounds="0,0,AutoSize,AutoSize"
-                                AbsoluteLayout.LayoutFlags="None"
-                                Spacing="10">
-                <Border StrokeThickness="0"
-                        BackgroundColor="Transparent"
-                        HeightRequest="300"
-                        WidthRequest="300">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnResourceSlotClicked"/>
-                    </Border.GestureRecognizers>
-                    <Grid>
-                        <BoxView Color="#4A4A4A"
-                                CornerRadius="10"
-                                Opacity="0.5"/>
-                        <Label Text="🌾"
-                               FontSize="{DynamicResource ButtonIconSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="Center"/>
-                        <Label Text="[Resource Slot]"
-                               FontSize="{DynamicResource ButtonPlaceholderSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="End"
-                               Margin="0,0,0,10"
-                               TextColor="White"
-                               Opacity="0.7"/>
-                    </Grid>
-                </Border>
-                <BoxView Color="#4CAF50" 
-                        HeightRequest="3" 
-                        WidthRequest="300"
-                        HorizontalOptions="Center"/>
-                <Label Text="Resource Slot"
-                       FontSize="{DynamicResource ButtonLabelSize}"
-                       FontAttributes="Bold"
-                       HorizontalOptions="Center"
-                       TextColor="White"/>
-            </VerticalStackLayout>
-            
-            <!-- Extract Button - Position set programmatically from absolute coordinates (X=0, Y=20) -->
-            <VerticalStackLayout x:Name="ExtractButton"
-                                AbsoluteLayout.LayoutBounds="0,0,AutoSize,AutoSize"
-                                AbsoluteLayout.LayoutFlags="None"
-                                Spacing="10">
-                <Border StrokeThickness="0"
-                        BackgroundColor="Transparent"
-                        HeightRequest="250"
-                        WidthRequest="250">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnExtractClicked"/>
-                    </Border.GestureRecognizers>
-                    <Grid>
-                        <BoxView Color="#2C1A5F"
-                                CornerRadius="10"
-                                Opacity="0.5"/>
-                        <Label Text="⚗️"
-                               FontSize="100"
-                               HorizontalOptions="Center"
-                               VerticalOptions="Center"/>
-                        <Label Text="[Extract]"
-                               FontSize="{DynamicResource ButtonPlaceholderSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="End"
-                               Margin="0,0,0,10"
-                               TextColor="White"
-                               Opacity="0.7"/>
-                    </Grid>
-                </Border>
-                <BoxView Color="#4CAF50" 
-                        HeightRequest="3" 
-                        WidthRequest="250"
-                        HorizontalOptions="Center"/>
-                <Label Text="Extract"
-                       FontSize="{DynamicResource ButtonLabelSize}"
-                       FontAttributes="Bold"
-                       HorizontalOptions="Center"
-                       TextColor="White"/>
-            </VerticalStackLayout>
             
             </AbsoluteLayout>
         </ContentView>

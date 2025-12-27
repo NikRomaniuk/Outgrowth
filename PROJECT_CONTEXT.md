@@ -429,7 +429,8 @@ Outgrowth/
     │   └── LaboratoryViewModel.cs       # Laboratory logic
     ├── Models/                      # Data models and environment objects
     │   ├── EnvObject.cs                 # Base class for environment objects
-    │   └── PotObject.cs                 # Pot object implementation
+    │   ├── PotObject.cs                 # Pot object implementation
+    │   └── FurnitureObject.cs           # Furniture object implementation
     ├── Platforms/                   # Platform-specific code
     │   ├── Android/
     │   ├── iOS/
@@ -565,17 +566,26 @@ Outgrowth/
   - Width and Height properties
   - `UpdatePosition()` method for automatic coordinate conversion
   - Abstract `CreateVisualElement()` method for visual representation
+  - **Interfaces**: Supports `IInteractable` (for clickable objects) and `IAnimated` (for animated objects)
 - **PotObject Implementation**: Concrete implementation for greenhouse pots
-  - Inherits from `EnvObject`
+  - Inherits from `EnvObject` and implements `IInteractable`
   - Creates pot UI elements dynamically (Border, icon, label, separator)
-  - Event handler support for pot interactions
+  - Event handler support for pot interactions (`Clicked` event, `InteractAction` callback)
+  - `CanInteract` property controls interaction availability
   - Uses DynamicResource for font sizes (ButtonIconSize, ButtonPlaceholderSize, ButtonLabelSize)
-- **Dynamic Creation**: Pots are created programmatically from `PotObject` instances, not hardcoded in XAML
+- **FurnitureObject Implementation**: Concrete implementation for decorative furniture (tables, shelves, lights, etc.)
+  - Inherits from `EnvObject`
+  - Creates furniture UI elements dynamically (Border, icon, optional display name)
+  - Supports custom background colors and sprites
+  - Icon size scales proportionally to object width
+  - Optional display name label for identification
+- **Dynamic Creation**: Objects are created programmatically from object instances, not hardcoded in XAML
 - **Benefits**: 
   - Cleaner XAML (no hardcoded elements)
   - Easy to add new object types by inheriting from `EnvObject`
   - Centralized position calculation logic
   - Consistent coordinate system across all objects
+  - Interface-based design for extensibility (IInteractable, IAnimated)
 
 ### 5.2 Planned Features (Not Yet Implemented)
 
@@ -728,30 +738,59 @@ The project uses a generic environment object system for managing interactive el
 - **Location**: `Outgrowth/Models/EnvObject.cs`
 - **Purpose**: Abstract base class for all environment objects (pots, furniture, decorations, etc.)
 - **Properties**:
+  - `Id`: Unique identifier for the object
   - `X`, `Y`: Logical coordinates (center of object)
   - `Width`, `Height`: Object dimensions in pixels
   - `VisualElement`: The UI representation (View)
+  - `BaseSprite`: Base sprite/icon for the object
 - **Methods**:
   - `UpdatePosition(double containerCenterX, double containerCenterY)`: Converts logical coordinates to pixel positions
   - `CreateVisualElement()`: Abstract method to create visual representation (must be implemented by derived classes)
+- **Interfaces**:
+  - `IInteractable`: Interface for objects that can be interacted with (clicked, tapped)
+    - `OnInteract()`: Method called when object is interacted with
+    - `CanInteract`: Property indicating if interaction is currently available
+  - `IAnimated`: Interface for objects that support animation
+    - `StartAnimation()`: Starts the animation
+    - `StopAnimation()`: Stops the animation
+    - `IsAnimating`: Property indicating if animation is currently running
 - **Coordinate System**: Uses 1:1 pixel-to-logical-unit ratio for simplified calculations
 
 #### PotObject Implementation
 - **Location**: `Outgrowth/Models/PotObject.cs`
 - **Purpose**: Concrete implementation for greenhouse pots
+- **Inheritance**: Inherits from `EnvObject` and implements `IInteractable`
 - **Properties**:
   - `PotNumber`: Pot identifier (1-5)
-  - `OnClick`: Event handler for pot interactions (`EventHandler<TappedEventArgs>?`)
+  - `Clicked`: Event handler for pot interactions (`EventHandler<TappedEventArgs>?`)
+  - `InteractAction`: Optional callback action for interactions (`Action?`)
+  - `CanInteract`: Property controlling whether pot can be interacted with (from `IInteractable`)
 - **Implementation**: 
   - Creates VerticalStackLayout with Border, icon, separator, and label
   - Uses DynamicResource for font sizes (ButtonIconSize, ButtonPlaceholderSize, ButtonLabelSize)
   - Implements tap gesture recognizer for interactions
+  - Calls `OnInteract()` when tapped, which invokes `InteractAction` if set
+
+#### FurnitureObject Implementation
+- **Location**: `Outgrowth/Models/FurnitureObject.cs`
+- **Purpose**: Concrete implementation for decorative furniture (tables, shelves, lights, etc.)
+- **Inheritance**: Inherits from `EnvObject` (does not implement interfaces by default)
+- **Properties**:
+  - `FurnitureType`: Type identifier for the furniture (e.g., "table", "shelf", "light")
+  - `DisplayName`: Optional display name for the furniture item
+  - `BackgroundColor`: Custom background color (defaults to `#3E2723` if not specified)
+- **Implementation**: 
+  - Creates VerticalStackLayout with Border, icon, and optional display name label
+  - Icon size scales proportionally to object width (40% of width)
+  - Background uses semi-transparent color with rounded corners
+  - Display name label only shown if `DisplayName` is not empty
 
 #### Benefits
 - **Clean XAML**: No hardcoded elements - objects created programmatically
 - **Scalable**: Easy to add new object types by inheriting from `EnvObject`
 - **Consistent**: Centralized position calculation logic
 - **Generic**: Same coordinate system and update logic for all objects
+- **Extensible**: Interface-based design allows adding interaction and animation capabilities
 
 ### Page Structure
 All environment pages use a consistent 3-column Grid layout:
@@ -1083,9 +1122,12 @@ All panels use consistent interaction pattern:
 
 **Recent Updates**:
 - Added `EnvObject` and `PotObject` generic environment object system
+- Added `FurnitureObject` for decorative furniture items
+- Added `IInteractable` and `IAnimated` interfaces for extensible object behavior
 - Updated coordinate system to use 1:1 pixel-to-logical-unit ratio across all pages
 - Pots are now created dynamically from `PotObject` instances, not hardcoded in XAML
 - Navigation restricted to middle three pots (Pot2, Pot3, Pot4) in GreenhousePage
+- `PotObject` now implements `IInteractable` interface with `InteractAction` callback support
 
 
 

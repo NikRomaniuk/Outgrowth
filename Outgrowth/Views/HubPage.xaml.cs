@@ -1,22 +1,40 @@
 using Outgrowth.ViewModels;
+using Outgrowth.Models;
 using System.Linq;
+#if WINDOWS
+using Outgrowth.Platforms.Windows;
+#endif
 
 namespace Outgrowth.Views;
 
 public partial class HubPage : ContentPage
 {
-    // Element coordinates (1:1 pixel ratio, container center: X=960, Y=540)
-    private readonly (int X, int Y, string Name)[] _elementCoordinates = 
+    // Station objects - created dynamically on page load
+    private readonly List<StationObject> _stationObjects = new()
     {
-        (-480, 0, "Market"),       // Left of center
-        (0, 162, "QuestConsole"),  // Center, above
-        (480, 0, "Statistics")     // Right of center
+        new StationObject("Market", "Market", -480, 0, 300, 300, "📦", Color.FromArgb("#4A4A4A")),
+        new StationObject("QuestConsole", "Quest Console", 0, 162, 300, 300, "📡", Color.FromArgb("#1E3A5F")),
+        new StationObject("Statistics", "Statistics", 480, 0, 300, 300, "📊", Color.FromArgb("#2C2C2C"))
     };
+    
+#if WINDOWS
+    private WindowsInput? _windowsInput;
+#endif
     
     public HubPage()
     {
         InitializeComponent();
         BindingContext = new HubViewModel();
+        
+        // Set up station object click handlers
+        _stationObjects[0].Clicked += (s, e) => OnMarketClicked(s ?? this, e);
+        _stationObjects[0].InteractAction = () => System.Diagnostics.Debug.WriteLine("Market interacted");
+        
+        _stationObjects[1].Clicked += (s, e) => OnQuestClicked(s ?? this, e);
+        _stationObjects[1].InteractAction = () => System.Diagnostics.Debug.WriteLine("Quest Console interacted");
+        
+        _stationObjects[2].Clicked += (s, e) => OnStatsClicked(s ?? this, e);
+        _stationObjects[2].InteractAction = () => System.Diagnostics.Debug.WriteLine("Statistics interacted");
         
         // Handle page size changes for scaling
         this.SizeChanged += OnPageSizeChanged;
@@ -30,13 +48,31 @@ public partial class HubPage : ContentPage
     
     private void OnPageLoaded(object? sender, EventArgs e)
     {
+        // Create station objects and add to environment
+        CreateStationObjects();
         // Initialize element positions from absolute coordinates
-        UpdateElementPositions();
+        UpdateStationPositions();
+        
+#if WINDOWS
+        // Attach Windows keyboard input handler (only Esc for closing panels)
+        _windowsInput = new WindowsInput(
+            onLeftArrow: () => { }, // No action
+            onRightArrow: () => { }, // No action
+            onEscape: CloseAllPanels  // Close panels with Esc key
+        );
+        _windowsInput.Attach();
+#endif
     }
     
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
         CloseAllPanels();
+        
+#if WINDOWS
+        // Detach Windows keyboard input handler
+        _windowsInput?.Detach();
+        _windowsInput = null;
+#endif
     }
 
     private void OnPageSizeChanged(object? sender, EventArgs e)
@@ -112,8 +148,8 @@ public partial class HubPage : ContentPage
                 LaboratoryButton.AnchorY = 0.5;
                 LaboratoryButton.Scale = scale;
                 
-                // Update element positions from absolute coordinates
-                UpdateElementPositions();
+                // Update station object positions from absolute coordinates
+                UpdateStationPositions();
                 
                 // Scale overlay panels to match environment scale
                 // This ensures panels appear the same size on both platforms
@@ -134,10 +170,26 @@ public partial class HubPage : ContentPage
     }
 
     /// <summary>
-    /// Updates element positions using 1:1 coordinate system (container center: X=960, Y=540)
-    /// Converts center coordinates to top-left corner for AbsoluteLayout
+    /// Creates station object UI elements and adds them to EnvironmentContainer
     /// </summary>
-    private void UpdateElementPositions()
+    private void CreateStationObjects()
+    {
+#if ANDROID || WINDOWS
+        if (EnvironmentContainer == null)
+            return;
+        
+        foreach (var station in _stationObjects)
+        {
+            var visualElement = station.CreateVisualElement();
+            EnvironmentContainer.Children.Add(visualElement);
+        }
+#endif
+    }
+    
+    /// <summary>
+    /// Updates station positions using 1:1 coordinate system (container center: X=960, Y=540)
+    /// </summary>
+    private void UpdateStationPositions()
     {
 #if ANDROID || WINDOWS
         if (EnvironmentContainer == null)
@@ -145,32 +197,10 @@ public partial class HubPage : ContentPage
         
         const double containerCenterX = 960.0;
         const double containerCenterY = 540.0;
-        const double elementHalfWidth = 150.0;   // Elements are 300x300
-        const double elementHalfHeight = 150.0;
         
-        foreach (var (logicalX, logicalY, name) in _elementCoordinates)
+        foreach (var station in _stationObjects)
         {
-            VerticalStackLayout? element = name switch
-            {
-                "Market" => FindByName("MarketButton") as VerticalStackLayout,
-                "QuestConsole" => FindByName("QuestConsoleButton") as VerticalStackLayout,
-                "Statistics" => FindByName("StatisticsButton") as VerticalStackLayout,
-                _ => null
-            };
-            
-            if (element == null)
-                continue;
-            
-            // Convert center coordinates to pixel positions (1:1 ratio)
-            double centerPixelX = containerCenterX + logicalX;
-            double centerPixelY = containerCenterY - logicalY; // Negative Y = below
-            
-            // Convert to top-left corner for AbsoluteLayout
-            double leftEdgeX = centerPixelX - elementHalfWidth;
-            double topEdgeY = centerPixelY - elementHalfHeight;
-            
-            AbsoluteLayout.SetLayoutBounds(element, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-            AbsoluteLayout.SetLayoutFlags(element, 0);
+            station.UpdatePosition(containerCenterX, containerCenterY);
         }
 #endif
     }
@@ -220,21 +250,24 @@ public partial class HubPage : ContentPage
     // Panel background taps (close panel)
     private void OnMarketPanelTapped(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
+#if ANDROID
+        // Only close panels on tap for Android (Windows uses Esc key)
         CloseMarketPanel();
 #endif
     }
 
     private void OnQuestPanelTapped(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
+#if ANDROID
+        // Only close panels on tap for Android (Windows uses Esc key)
         CloseQuestPanel();
 #endif
     }
 
     private void OnStatsPanelTapped(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
+#if ANDROID
+        // Only close panels on tap for Android (Windows uses Esc key)
         CloseStatsPanel();
 #endif
     }

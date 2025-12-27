@@ -1,6 +1,9 @@
 using Outgrowth.ViewModels;
 using Outgrowth.Models;
 using System.Linq;
+#if WINDOWS
+using Outgrowth.Platforms.Windows;
+#endif
 
 namespace Outgrowth.Views;
 
@@ -9,6 +12,10 @@ public partial class GreenhousePage : ContentPage
     // Current centered pot index (0 = Pot1 rightmost, increases left)
     // Navigation limited to indices 1-3 (Pot2, Pot3, Pot4) - starts at Pot2
     private int _currentItemIndex = 1;
+    
+#if WINDOWS
+    private WindowsInput? _windowsInput;
+#endif
     
     // All pots - created dynamically on page load
     private readonly List<PotObject> _pots =
@@ -27,12 +34,12 @@ public partial class GreenhousePage : ContentPage
         InitializeComponent();
         BindingContext = new GreenhouseViewModel();
         
-        // Set up pot click handlers
-        _pots[0].OnClick = OnPot1Clicked;
-        _pots[1].OnClick = OnPot2Clicked;
-        _pots[2].OnClick = OnPot3Clicked;
-        _pots[3].OnClick = OnPot4Clicked;
-        _pots[4].OnClick = OnPot5Clicked;
+        // Set up pot click handlers using new architecture
+        foreach (var pot in _pots)
+        {
+            pot.Clicked += (sender, e) => OnPotClicked(pot);
+            pot.InteractAction = () => HandlePotInteraction(pot.PotNumber);
+        }
         
         // Set MovePanel visibility based on platform
 #if ANDROID
@@ -52,12 +59,70 @@ public partial class GreenhousePage : ContentPage
         CreatePotElements();
         UpdatePotPositions();
         UpdateContentPosition(); // Center Pot2 on load
+        
+#if WINDOWS
+        // Attach Windows keyboard input handler
+        _windowsInput = new WindowsInput(
+            onLeftArrow: OnLeftArrowPressed,
+            onRightArrow: OnRightArrowPressed,
+            onEscape: CloseAllPanels  // Close panels with Esc key
+        );
+        _windowsInput.Attach();
+#endif
     }
     
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
         CloseAllPanels();
+        
+#if WINDOWS
+        // Detach Windows keyboard input handler
+        _windowsInput?.Detach();
+        _windowsInput = null;
+#endif
     }
+
+#if WINDOWS
+    /// <summary>
+    /// Handles Left Arrow or A key press on Windows (moves camera left)
+    /// </summary>
+    private void OnLeftArrowPressed()
+    {
+        System.Diagnostics.Debug.WriteLine($"[Windows] Left Arrow/A pressed, current index: {_currentItemIndex}");
+        
+        // Move left (increase index, max index = pots.Count - 2)
+        if (_currentItemIndex < _pots.Count - 2)
+        {
+            _currentItemIndex++;
+            System.Diagnostics.Debug.WriteLine($"[Windows] Moving left, new index: {_currentItemIndex}");
+            UpdateContentPosition();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[Windows] Cannot move left, already at max index");
+        }
+    }
+    
+    /// <summary>
+    /// Handles Right Arrow or D key press on Windows (moves camera right)
+    /// </summary>
+    private void OnRightArrowPressed()
+    {
+        System.Diagnostics.Debug.WriteLine($"[Windows] Right Arrow/D pressed, current index: {_currentItemIndex}");
+        
+        // Move right (decrease index, min index = 1)
+        if (_currentItemIndex > 1)
+        {
+            _currentItemIndex--;
+            System.Diagnostics.Debug.WriteLine($"[Windows] Moving right, new index: {_currentItemIndex}");
+            UpdateContentPosition();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[Windows] Cannot move right, already at min index");
+        }
+    }
+#endif
 
     private void OnPageSizeChanged(object? sender, EventArgs e)
     {
@@ -272,24 +337,24 @@ public partial class GreenhousePage : ContentPage
         await Shell.Current.GoToAsync("//HubPage");
     }
 
-    private void OnPot1Clicked(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// Handles interaction logic for pots (via InteractAction)
+    /// </summary>
+    private void HandlePotInteraction(int potNumber)
     {
+        // TODO: Add pot interaction logic (plant selection, watering, etc.)
+        System.Diagnostics.Debug.WriteLine($"Pot {potNumber} interacted via IInteractable.OnInteract()");
     }
 
-    private void OnPot2Clicked(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// Universal handler for pot click events
+    /// </summary>
+    /// <param name="pot">The pot object that was clicked</param>
+    private void OnPotClicked(PotObject pot)
     {
-    }
-
-    private void OnPot3Clicked(object? sender, TappedEventArgs e)
-    {
-    }
-
-    private void OnPot4Clicked(object? sender, TappedEventArgs e)
-    {
-    }
-
-    private void OnPot5Clicked(object? sender, TappedEventArgs e)
-    {
+        System.Diagnostics.Debug.WriteLine($"Pot {pot.PotNumber} (ID: {pot.Id}) clicked");
+        // TODO: Add pot-specific click logic here
+        // Example: Open pot details, show plant info, etc.
     }
 
     private void OnLiquidsButtonClicked(object sender, EventArgs e)
@@ -336,8 +401,8 @@ public partial class GreenhousePage : ContentPage
     private void OnLeftArrowButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        // Move left (max index 3 = Pot4)
-        if (_currentItemIndex < 3)
+        // Move left (max index = last pot index - 1)
+        if (_currentItemIndex < _pots.Count - 2)
         {
             _currentItemIndex++;
             UpdateContentPosition();
@@ -417,7 +482,8 @@ public partial class GreenhousePage : ContentPage
 
     private void OnBackgroundOverlayTapped(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
+#if ANDROID
+        // Only close panels on tap for Android (Windows uses Esc key)
         CloseAllPanels();
 #endif
     }
