@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Outgrowth.Views.GreenhousePage">
+    
+    <Grid ColumnDefinitions="Auto,*,Auto">
+        
+        <!-- Layer 1: Background (spans all columns) -->
+        <BoxView Grid.ColumnSpan="3" Color="#0A0E1A" />
+        
+        <!-- TODO: Replace with actual greenhouse background image when available -->
+        <Image Grid.ColumnSpan="3"
+               Source="dotnet_bot.png" 
+               Aspect="AspectFill"
+               Opacity="0.2"/>
+        
+        <!-- Left Gutter: Placeholder for maintaining column width -->
+        <Grid Grid.Column="0"
+              x:Name="LeftGutterPlaceholder"
+              BackgroundColor="Transparent"
+              WidthRequest="300"
+              HeightRequest="500"
+              Margin="20,0,0,0"
+              HorizontalOptions="Start"
+              VerticalOptions="Center"
+              InputTransparent="True"
+              ZIndex="100"/>
+        
+        <!-- Center Column: Environment (16:9 Aspect Ratio, Centered, Scaled by Height) -->
+        <ContentView x:Name="EnvironmentWrapper"
+                     Grid.Column="1"
+                     HorizontalOptions="Center"
+                     VerticalOptions="Fill"
+                     ZIndex="100">
+            
+            <!-- Environment container with 16:9 aspect ratio - scales based on screen height -->
+            <AbsoluteLayout x:Name="EnvironmentContainer"
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Fill">
+                
+                <!-- Content Container: Contains all pots and future furniture items -->
+                <!-- This container moves as a whole unit when scrolling -->
+                <!-- Uses absolute coordinate system: X range from -9600 to 9600, Y range from -540 to 540 -->
+                <!-- Container width = 19200 pixels (19200 * 1), height = 1080 pixels (1080 * 1) -->
+                <!-- Center of container X = 9600 (19200 / 2), Y = 540 (1080 / 2) -->
+                <!-- Scale: 1:1 pixel-to-logical-unit ratio (1 logical unit = 1 pixel) -->
+                <!-- Pots are added dynamically from code-behind using PotObject instances -->
+                <AbsoluteLayout x:Name="ContentContainer"
+                               WidthRequest="19200"
+                               HeightRequest="1080"
+                               AbsoluteLayout.LayoutBounds="0,0,19200,1080"
+                               AbsoluteLayout.LayoutFlags="None">
+                    <!-- Pots will be added here programmatically -->
+                </AbsoluteLayout>
+                
+            </AbsoluteLayout>
+        </ContentView>
+        
+        <!-- Right Gutter: Hub Button -->
+        <AbsoluteLayout Grid.Column="2"
+                       x:Name="HubButtonLayout"
+                       HorizontalOptions="End"
+                       VerticalOptions="Fill"
+                       ZIndex="1000">
+            <VerticalStackLayout x:Name="HubButton"
+                                AbsoluteLayout.LayoutBounds="1,0.5,AutoSize,AutoSize"
+                                AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+                                Spacing="10"
+                                Margin="0,0,20,0">
+                <Border StrokeThickness="0"
+                        BackgroundColor="Transparent"
+                        HeightRequest="300"
+                        WidthRequest="300">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnHubClicked"/>
+                    </Border.GestureRecognizers>
+                    <Grid>
+                        <BoxView Color="#1E3A5F"
+                                CornerRadius="10"
+                                Opacity="0.5"/>
+                        <Label Text="🛰️"
+                               FontSize="{DynamicResource ButtonIconSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                        <Label Text="[Hub Image]"
+                               FontSize="{DynamicResource ButtonPlaceholderSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="End"
+                               Margin="0,0,0,10"
+                               TextColor="White"
+                               Opacity="0.7"/>
+                    </Grid>
+                </Border>
+                <BoxView Color="#FFD700" 
+                        HeightRequest="3" 
+                        WidthRequest="300"
+                        HorizontalOptions="Center"/>
+                <Label Text="Hub"
+                       FontSize="{DynamicResource ButtonLabelSize}"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="White"/>
+            </VerticalStackLayout>
+        </AbsoluteLayout>
+        
+        <!-- Background Overlay (for closing panels on outside click) - Only shown when panel is open -->
+        <Grid x:Name="BackgroundOverlay"
+              Grid.ColumnSpan="3"
+              BackgroundColor="Transparent"
+              Opacity="0"
+              InputTransparent="True"
+              IsVisible="False"
+              ZIndex="500">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnBackgroundOverlayTapped"/>
+            </Grid.GestureRecognizers>
+        </Grid>
+        
+        <!-- Left Gutter: Liquids Panel (overlapping with Seeds Panel) -->
+        <AbsoluteLayout Grid.Column="0"
+                       x:Name="LiquidsPanelWrapper"
+                       HorizontalOptions="Start"
+                       VerticalOptions="Fill"
+                       ZIndex="1000">
+            <Grid x:Name="LiquidsPanel"
+                  AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="YProportional"
+                  WidthRequest="300"
+                  HeightRequest="500"
+                  Margin="20,0,0,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#4CAF50"
+                        BackgroundColor="#1A1A1A"
+                        Padding="15"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnLiquidsPanelTapped"/>
+                    </Border.GestureRecognizers>
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10"/>
+                    </Border.StrokeShape>
+                    <Grid RowDefinitions="Auto,*">
+                        <Label Grid.Row="0"
+                               Text="💧 Liquids"
+                               FontSize="{DynamicResource ResourcePanelTitleSize}"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               VerticalOptions="Center"
+                               Margin="0,0,0,10"/>
+                        
+                        <ScrollView Grid.Row="1"
+                                    VerticalOptions="Fill"
+                                    Orientation="Vertical">
+                            <VerticalStackLayout Spacing="10">
+                                <!-- Liquid Item: Water -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#0F1F2F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="💧"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Water"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                                
+                                <!-- Liquid Item: Fertilizer -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#1F1F0F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="🧪"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Fertilizer"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                                
+                                <!-- Liquid Item: Growth Serum -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#2F0F1F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="⚗️"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Growth Serum"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                            </VerticalStackLayout>
+                        </ScrollView>
+                    </Grid>
+                </Border>
+            </Grid>
+        </AbsoluteLayout>
+        
+        <!-- Left Gutter: Seeds Panel (overlapping with Liquids Panel) -->
+        <AbsoluteLayout Grid.Column="0"
+                       x:Name="SeedsPanelWrapper"
+                       HorizontalOptions="Start"
+                       VerticalOptions="Fill"
+                       ZIndex="1000">
+            <Grid x:Name="SeedsPanel"
+                  AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="YProportional"
+                  WidthRequest="300"
+                  HeightRequest="500"
+                  Margin="20,0,0,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#4CAF50"
+                        BackgroundColor="#1A1A1A"
+                        Padding="15"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnSeedsPanelTapped"/>
+                    </Border.GestureRecognizers>
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10"/>
+                    </Border.StrokeShape>
+                    <Grid RowDefinitions="Auto,*">
+                        <Label Grid.Row="0"
+                               Text="🌱 Seeds"
+                               FontSize="{DynamicResource ResourcePanelTitleSize}"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               VerticalOptions="Center"
+                               Margin="0,0,0,10"/>
+                        
+                        <ScrollView Grid.Row="1"
+                                    VerticalOptions="Fill"
+                                    Orientation="Vertical">
+                            <VerticalStackLayout Spacing="10">
+                                <!-- Seed Item: Grass Seed -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#0F1F0F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="🌾"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Grass Seed"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                                
+                                <!-- Seed Item: Flower Seed -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#1F0F1F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="🌸"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Flower Seed"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                                
+                                <!-- Seed Item: Tree Seed -->
+                                <Border StrokeThickness="1"
+                                        Stroke="#4CAF50"
+                                        BackgroundColor="#0F0F1F"
+                                        Padding="10">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8"/>
+                                    </Border.StrokeShape>
+                                    <HorizontalStackLayout Spacing="10">
+                                        <Label Text="🌳"
+                                               FontSize="{DynamicResource ResourcePanelIconSize}"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="Tree Seed"
+                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White"/>
+                                            <Label Text="Qty: 0"
+                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
+                                                   TextColor="White"
+                                                   Opacity="0.7"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Border>
+                            </VerticalStackLayout>
+                        </ScrollView>
+                    </Grid>
+                </Border>
+            </Grid>
+        </AbsoluteLayout>
+        
+        <!-- Bottom Panels Container -->
+        <Grid x:Name="BottomPanelsContainer"
+              Grid.ColumnSpan="3"
+              ColumnDefinitions="*,Auto,Auto,*"
+              VerticalOptions="End"
+              HorizontalOptions="Fill"
+              ZIndex="1500"
+              Margin="0,0,0,20"
+              ColumnSpacing="20">
+            
+            <!-- Tools Panel - Left Center Side (Always Visible) -->
+            <Grid x:Name="ToolsPanel"
+                  Grid.Column="1"
+                  VerticalOptions="End">
+                <Border StrokeThickness="2"
+                        Stroke="#FFD700"
+                        BackgroundColor="#1A1A1A"
+                        Padding="15"
+                        WidthRequest="600"
+                        HeightRequest="150">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10"/>
+                    </Border.StrokeShape>
+                    <HorizontalStackLayout x:Name="ToolsButtonsLayout"
+                                          Spacing="20"
+                                          HorizontalOptions="Center"
+                                          VerticalOptions="Center">
+                        <!-- Liquids Button -->
+                        <Border x:Name="LiquidsButton"
+                                StrokeThickness="2"
+                                Stroke="#4CAF50"
+                                BackgroundColor="#0F1F2F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnLiquidsButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="LiquidsIcon"
+                                   Text="💧"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                        
+                        <!-- Seeds Button -->
+                        <Border x:Name="SeedsButton"
+                                StrokeThickness="2"
+                                Stroke="#4CAF50"
+                                BackgroundColor="#1F1F0F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnSeedsButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="SeedsIcon"
+                                   Text="🌱"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                        
+                        <!-- Cancel Button -->
+                        <Border x:Name="CancelButton"
+                                StrokeThickness="2"
+                                Stroke="#FF5252"
+                                BackgroundColor="#2F0F0F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnCancelButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="CancelIcon"
+                                   Text="❌"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                    </HorizontalStackLayout>
+                </Border>
+            </Grid>
+            
+            <!-- Move Panel - Right Center Side (Android Only) -->
+            <Grid x:Name="MovePanel"
+                  Grid.Column="2"
+                  VerticalOptions="End"
+                  IsVisible="False">
+                <Border StrokeThickness="2"
+                        Stroke="#FFD700"
+                        BackgroundColor="#1A1A1A"
+                        Padding="15"
+                        WidthRequest="300"
+                        HeightRequest="150">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10"/>
+                    </Border.StrokeShape>
+                    <HorizontalStackLayout x:Name="MoveButtonsLayout"
+                                          Spacing="20"
+                                          HorizontalOptions="Center"
+                                          VerticalOptions="Center">
+                        <!-- Left Arrow Button -->
+                        <Border x:Name="LeftArrowButton"
+                                StrokeThickness="2"
+                                Stroke="#4CAF50"
+                                BackgroundColor="#0F1F2F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnLeftArrowButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="LeftArrowIcon"
+                                   Text="⬅️"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                        
+                        <!-- Right Arrow Button -->
+                        <Border x:Name="RightArrowButton"
+                                StrokeThickness="2"
+                                Stroke="#4CAF50"
+                                BackgroundColor="#1F1F0F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnRightArrowButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="RightArrowIcon"
+                                   Text="➡️"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                    </HorizontalStackLayout>
+                </Border>
+            </Grid>
+        </Grid>
+        
+    </Grid>
+    
+</ContentPage>

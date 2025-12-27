@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Outgrowth.Views.LaboratoryPage">
+    
+    <Grid ColumnDefinitions="Auto,*,Auto">
+        
+        <!-- Layer 1: Background (spans all columns) -->
+        <BoxView Grid.ColumnSpan="3" Color="#0A0E1A" />
+        
+        <!-- TODO: Replace with actual lab background image when available -->
+        <Image Grid.ColumnSpan="3"
+               Source="dotnet_bot.png" 
+               Aspect="AspectFill"
+               Opacity="0.2"/>
+        
+        <!-- Left Gutter: Hub Button -->
+        <AbsoluteLayout Grid.Column="0"
+                       x:Name="HubButtonLayout"
+                       HorizontalOptions="Start"
+                       VerticalOptions="Fill"
+                       ZIndex="1000">
+            <VerticalStackLayout x:Name="HubButton"
+                                AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
+                                AbsoluteLayout.LayoutFlags="YProportional"
+                                Spacing="10"
+                                Margin="20,0,0,0">
+                <Border StrokeThickness="0"
+                        BackgroundColor="Transparent"
+                        HeightRequest="300"
+                        WidthRequest="300">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnHubClicked"/>
+                    </Border.GestureRecognizers>
+                    <Grid>
+                        <!-- Placeholder image area -->
+                        <BoxView Color="#1E3A5F"
+                                CornerRadius="10"
+                                Opacity="0.5"/>
+                        <Label Text="🛰️"
+                               FontSize="{DynamicResource ButtonIconSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                        <Label Text="[Hub Image]"
+                               FontSize="{DynamicResource ButtonPlaceholderSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="End"
+                               Margin="0,0,0,10"
+                               TextColor="White"
+                               Opacity="0.7"/>
+                    </Grid>
+                </Border>
+                <BoxView Color="#FFD700" 
+                        HeightRequest="3" 
+                        WidthRequest="300"
+                        HorizontalOptions="Center"/>
+                <Label Text="Hub"
+                       FontSize="{DynamicResource ButtonLabelSize}"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="White"/>
+            </VerticalStackLayout>
+        </AbsoluteLayout>
+        
+        <!-- Center Column: Environment (16:9 Aspect Ratio, Centered, Scaled by Height) -->
+        <ContentView x:Name="EnvironmentWrapper"
+                     Grid.Column="1"
+                     HorizontalOptions="Center"
+                     VerticalOptions="Fill"
+                     ZIndex="100">
+            
+            <!-- Environment container with 16:9 aspect ratio - scales based on screen height -->
+            <!-- Container width: 1920 pixels (19.2 * 100) for coordinate system -100 to 100 -->
+            <!-- Container height: 1080 pixels (10.8 * 100) for coordinate system -100 to 100 -->
+            <AbsoluteLayout x:Name="EnvironmentContainer"
+                           WidthRequest="1920"
+                           HeightRequest="1080"
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Fill">
+            
+            <!-- Resource Slot Button - Position set programmatically from absolute coordinates (X=0, Y=-20) -->
+            <VerticalStackLayout x:Name="ResourceSlotButton"
+                                AbsoluteLayout.LayoutBounds="0,0,AutoSize,AutoSize"
+                                AbsoluteLayout.LayoutFlags="None"
+                                Spacing="10">
+                <Border StrokeThickness="0"
+                        BackgroundColor="Transparent"
+                        HeightRequest="300"
+                        WidthRequest="300">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnResourceSlotClicked"/>
+                    </Border.GestureRecognizers>
+                    <Grid>
+                        <BoxView Color="#4A4A4A"
+                                CornerRadius="10"
+                                Opacity="0.5"/>
+                        <Label Text="🌾"
+                               FontSize="{DynamicResource ButtonIconSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                        <Label Text="[Resource Slot]"
+                               FontSize="{DynamicResource ButtonPlaceholderSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="End"
+                               Margin="0,0,0,10"
+                               TextColor="White"
+                               Opacity="0.7"/>
+                    </Grid>
+                </Border>
+                <BoxView Color="#4CAF50" 
+                        HeightRequest="3" 
+                        WidthRequest="300"
+                        HorizontalOptions="Center"/>
+                <Label Text="Resource Slot"
+                       FontSize="{DynamicResource ButtonLabelSize}"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="White"/>
+            </VerticalStackLayout>
+            
+            <!-- Extract Button - Position set programmatically from absolute coordinates (X=0, Y=20) -->
+            <VerticalStackLayout x:Name="ExtractButton"
+                                AbsoluteLayout.LayoutBounds="0,0,AutoSize,AutoSize"
+                                AbsoluteLayout.LayoutFlags="None"
+                                Spacing="10">
+                <Border StrokeThickness="0"
+                        BackgroundColor="Transparent"
+                        HeightRequest="250"
+                        WidthRequest="250">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnExtractClicked"/>
+                    </Border.GestureRecognizers>
+                    <Grid>
+                        <BoxView Color="#2C1A5F"
+                                CornerRadius="10"
+                                Opacity="0.5"/>
+                        <Label Text="⚗️"
+                               FontSize="100"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                        <Label Text="[Extract]"
+                               FontSize="{DynamicResource ButtonPlaceholderSize}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="End"
+                               Margin="0,0,0,10"
+                               TextColor="White"
+                               Opacity="0.7"/>
+                    </Grid>
+                </Border>
+                <BoxView Color="#4CAF50" 
+                        HeightRequest="3" 
+                        WidthRequest="250"
+                        HorizontalOptions="Center"/>
+                <Label Text="Extract"
+                       FontSize="{DynamicResource ButtonLabelSize}"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="White"/>
+            </VerticalStackLayout>
+            
+            </AbsoluteLayout>
+        </ContentView>
+        
+        <!-- Background Overlay (for closing panel on outside click) - Only shown when panel is open -->
+        <Grid x:Name="BackgroundOverlay"
+              Grid.ColumnSpan="3"
+              BackgroundColor="Transparent"
+              Opacity="0"
+              InputTransparent="True"
+              IsVisible="False"
+              ZIndex="500">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnBackgroundOverlayTapped"/>
+            </Grid.GestureRecognizers>
+        </Grid>
+        
+        <!-- Right Gutter: Resource List ScrollView -->
+        <AbsoluteLayout Grid.Column="2"
+                       x:Name="ResourceListWrapper"
+                       HorizontalOptions="End"
+                       VerticalOptions="Fill"
+                       ZIndex="1000">
+            <!-- Invisible placeholder Grid to maintain column width (scales like HubButton) -->
+            <Grid x:Name="ResourceListPlaceholder"
+                  AbsoluteLayout.LayoutBounds="1,0.5,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+                  BackgroundColor="Transparent"
+                  WidthRequest="300"
+                  HeightRequest="500"
+                  Margin="0,0,20,0"
+                  InputTransparent="True"/>
+            
+            <!-- Resource List Panel -->
+            <Grid x:Name="ResourceListContainer"
+                  AbsoluteLayout.LayoutBounds="1,0.5,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+                  WidthRequest="300"
+                  HeightRequest="500"
+                  Margin="0,0,20,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#4CAF50"
+                        BackgroundColor="#1A1A1A"
+                        Padding="15"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnResourcePanelTapped"/>
+                </Border.GestureRecognizers>
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10"/>
+                </Border.StrokeShape>
+                <Grid RowDefinitions="Auto,*">
+                    <Label Grid.Row="0"
+                           Text="📦 Resources"
+                           FontSize="{DynamicResource ResourcePanelTitleSize}"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           VerticalOptions="Center"
+                           Margin="0,0,0,10"/>
+                    
+                    <ScrollView Grid.Row="1"
+                                VerticalOptions="Fill"
+                                Orientation="Vertical">
+                        <VerticalStackLayout Spacing="10">
+                            <!-- Resource Item: Grass -->
+                            <Border StrokeThickness="1"
+                                    Stroke="#4CAF50"
+                                    BackgroundColor="#0F1F0F"
+                                    Padding="10">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="8"/>
+                                </Border.StrokeShape>
+                                <HorizontalStackLayout Spacing="10">
+                                    <Label Text="🌿"
+                                           FontSize="{DynamicResource ResourcePanelIconSize}"
+                                           VerticalOptions="Center"/>
+                                    <VerticalStackLayout Spacing="3">
+                                        <Label Text="Grass"
+                                               FontSize="{DynamicResource ResourcePanelBodySize}"
+                                               FontAttributes="Bold"
+                                               TextColor="White"/>
+                                        <Label Text="Qty: 0"
+                                               FontSize="{DynamicResource ResourcePanelQtySize}"
+                                               TextColor="White"
+                                               Opacity="0.7"/>
+                                    </VerticalStackLayout>
+                                </HorizontalStackLayout>
+                            </Border>
+                            
+                            <!-- Resource Item: Lum -->
+                            <Border StrokeThickness="1"
+                                    Stroke="#4CAF50"
+                                    BackgroundColor="#1F1F0F"
+                                    Padding="10">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="8"/>
+                                </Border.StrokeShape>
+                                <HorizontalStackLayout Spacing="10">
+                                    <Label Text="💡"
+                                           FontSize="{DynamicResource ResourcePanelIconSize}"
+                                           VerticalOptions="Center"/>
+                                    <VerticalStackLayout Spacing="3">
+                                        <Label Text="Lum"
+                                               FontSize="{DynamicResource ResourcePanelBodySize}"
+                                               FontAttributes="Bold"
+                                               TextColor="White"/>
+                                        <Label Text="Qty: 0"
+                                               FontSize="{DynamicResource ResourcePanelQtySize}"
+                                               TextColor="White"
+                                               Opacity="0.7"/>
+                                    </VerticalStackLayout>
+                                </HorizontalStackLayout>
+                            </Border>
+                            
+                            <!-- Resource Item: Coal -->
+                            <Border StrokeThickness="1"
+                                    Stroke="#4CAF50"
+                                    BackgroundColor="#0F0F0F"
+                                    Padding="10">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="8"/>
+                                </Border.StrokeShape>
+                                <HorizontalStackLayout Spacing="10">
+                                    <Label Text="⚫"
+                                           FontSize="{DynamicResource ResourcePanelIconSize}"
+                                           VerticalOptions="Center"/>
+                                    <VerticalStackLayout Spacing="3">
+                                        <Label Text="Coal"
+                                               FontSize="{DynamicResource ResourcePanelBodySize}"
+                                               FontAttributes="Bold"
+                                               TextColor="White"/>
+                                        <Label Text="Qty: 0"
+                                               FontSize="{DynamicResource ResourcePanelQtySize}"
+                                               TextColor="White"
+                                               Opacity="0.7"/>
+                                    </VerticalStackLayout>
+                                </HorizontalStackLayout>
+                            </Border>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+            </Grid>
+        </AbsoluteLayout>
+        
+    </Grid>
+    
+</ContentPage>
+

@@ -64,4 +64,30 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.8" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- Views -->
+		<MauiXaml Update="Views\HubPage.xaml">
+			<SubType>Designer</SubType>
+		</MauiXaml>
+		<MauiXaml Update="Views\GreenhousePage.xaml">
+			<SubType>Designer</SubType>
+		</MauiXaml>
+		<MauiXaml Update="Views\LaboratoryPage.xaml">
+			<SubType>Designer</SubType>
+		</MauiXaml>
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Code-behind files -->
+		<Compile Update="Views\HubPage.xaml.cs">
+			<DependentUpon>HubPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Update="Views\GreenhousePage.xaml.cs">
+			<DependentUpon>GreenhousePage.xaml</DependentUpon>
+		</Compile>
+		<Compile Update="Views\LaboratoryPage.xaml.cs">
+			<DependentUpon>LaboratoryPage.xaml</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
 </Project>

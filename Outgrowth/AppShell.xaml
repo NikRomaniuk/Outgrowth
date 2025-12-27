@@ -4,11 +4,32 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:Outgrowth"
-    Title="Outgrowth">
+    xmlns:views="clr-namespace:Outgrowth.Views"
+    Title="Outgrowth"
+    FlyoutBehavior="Disabled">
 
+    <!-- Main Menu -->
     <ShellContent
-        Title="Home"
+        Title="Main Menu"
         ContentTemplate="{DataTemplate local:MainPage}"
         Route="MainPage" />
+
+    <!-- Hub - Command Center -->
+    <ShellContent
+        Title=""
+        ContentTemplate="{DataTemplate views:HubPage}"
+        Route="HubPage" />
+
+    <!-- Greenhouse - Plant Cultivation -->
+    <ShellContent
+        Title=""
+        ContentTemplate="{DataTemplate views:GreenhousePage}"
+        Route="GreenhousePage" />
+
+    <!-- Laboratory - Research & Breeding -->
+    <ShellContent
+        Title=""
+        ContentTemplate="{DataTemplate views:LaboratoryPage}"
+        Route="LaboratoryPage" />
 
 </Shell>

@@ -1,24 +1,40 @@
-﻿namespace Outgrowth
+﻿using Outgrowth.ViewModels;
+
+namespace Outgrowth;
+
+public partial class MainPage : ContentPage
 {
-    public partial class MainPage : ContentPage
+    public MainPage()
     {
-        int count = 0;
+        InitializeComponent();
+        BindingContext = new MainMenuViewModel();
+        CheckForSaveGame();
+    }
 
-        public MainPage()
-        {
-            InitializeComponent();
-        }
+    private void CheckForSaveGame()
+    {
+        // TODO: Implement save game detection
+    }
 
-        private void OnCounterClicked(object? sender, EventArgs e)
-        {
-            count++;
+    private async void OnNewGameClicked(object sender, EventArgs e)
+    {
+        await Shell.Current.GoToAsync("//HubPage");
+    }
 
-            if (count == 1)
-                CounterBtn.Text = $"Clicked {count} time";
-            else
-                CounterBtn.Text = $"Clicked {count} times";
+    private async void OnContinueClicked(object sender, EventArgs e)
+    {
+        // TODO: Load save game
+        await Shell.Current.GoToAsync("//HubPage");
+    }
 
-            SemanticScreenReader.Announce(CounterBtn.Text);
-        }
+    private async void OnSettingsClicked(object sender, EventArgs e)
+    {
+        // TODO: Implement settings page
+        await DisplayAlert("Settings", "Settings page coming soon!", "OK");
+    }
+
+    private void OnExitClicked(object sender, EventArgs e)
+    {
+        Application.Current?.Quit();
     }
 }

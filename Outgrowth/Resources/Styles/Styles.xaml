@@ -437,4 +437,38 @@
         <Setter Property="SelectedTabColor" Value="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray200}}" />
     </Style>
 
+    <!-- HubPage Font Size Resources -->
+    <OnPlatform x:Key="ButtonIconSize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="140" />
+        <On Platform="WinUI" Value="120" />
+    </OnPlatform>
+    <OnPlatform x:Key="ButtonLabelSize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="40" />
+        <On Platform="WinUI" Value="30" />
+    </OnPlatform>
+    <OnPlatform x:Key="ButtonPlaceholderSize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="40" />
+        <On Platform="WinUI" Value="30" />
+    </OnPlatform>
+    <OnPlatform x:Key="PanelTitleSize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="60" />
+        <On Platform="WinUI" Value="40" />
+    </OnPlatform>
+    <OnPlatform x:Key="PanelBodySize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="40" />
+        <On Platform="WinUI" Value="30" />
+    </OnPlatform>
+    <OnPlatform x:Key="PanelButtonSize" x:TypeArguments="x:Double">
+        <On Platform="Android" Value="30" />
+        <On Platform="WinUI" Value="20" />
+    </OnPlatform>
+    <!-- Resource Panel Font Sizes (Windows base values, scaled automatically based on screen size) -->
+    <x:Double x:Key="ResourcePanelTitleSize">40</x:Double>
+    <x:Double x:Key="ResourcePanelBodySize">30</x:Double>
+    <x:Double x:Key="ResourcePanelQtySize">24</x:Double>
+    <x:Double x:Key="ResourcePanelIconSize">40</x:Double>
+    
+    <!-- Base font scale factor (1.0 = Windows base, adjusted dynamically based on screen size) -->
+    <x:Double x:Key="FontScaleFactor">1.0</x:Double>
+
 </ResourceDictionary>
