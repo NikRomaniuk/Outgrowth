@@ -1,5 +1,6 @@
 using Outgrowth.ViewModels;
 using Outgrowth.Models;
+using Outgrowth.Services;
 using System.Linq;
 #if WINDOWS
 using Outgrowth.Platforms.Windows;
@@ -68,10 +69,39 @@ public partial class HubPage : ContentPage
     {
         CloseAllPanels();
         
+        // Clean up dynamically created elements to prevent memory leaks
+        CleanupStationObjects();
+        
 #if WINDOWS
         // Detach Windows keyboard input handler
         _windowsInput?.Detach();
         _windowsInput = null;
+#endif
+    }
+    
+    /// <summary>
+    /// Cleans up station objects and their visual elements to prevent memory leaks
+    /// </summary>
+    private void CleanupStationObjects()
+    {
+#if ANDROID || WINDOWS
+        if (EnvironmentContainer == null)
+            return;
+        
+        // Remove all dynamically created elements from container
+        foreach (var station in _stationObjects)
+        {
+            if (station.VisualElement != null && EnvironmentContainer.Children.Contains(station.VisualElement))
+            {
+                // Clear gesture recognizers to break circular references
+                if (station.VisualElement is Border border && border.GestureRecognizers.Count > 0)
+                {
+                    border.GestureRecognizers.Clear();
+                }
+                
+                EnvironmentContainer.Children.Remove(station.VisualElement);
+            }
+        }
 #endif
     }
 
@@ -86,67 +116,43 @@ public partial class HubPage : ContentPage
             
             if (pageHeight > 0 && pageWidth > 0)
             {
-                // Calculate 16:9 aspect ratio based on available height
-                var targetHeight = pageHeight;
-                var targetWidth = targetHeight * 16.0 / 9.0;
-                
-                // If calculated width exceeds screen width, scale by width instead
-                if (targetWidth > pageWidth)
-                {
-                    targetWidth = pageWidth;
-                    targetHeight = targetWidth * 9.0 / 16.0;
-                }
+                // Update screen properties
+                var screenProps = ScreenProperties.Instance;
+                screenProps.UpdateScreenProperties(pageWidth, pageHeight);
                 
                 // Set container size to reference size (design size)
-                const double referenceWidth = 1920.0;
-                const double referenceHeight = 1080.0;
-                
-                EnvironmentContainer.WidthRequest = referenceWidth;
-                EnvironmentContainer.HeightRequest = referenceHeight;
-                
-                // Calculate scale factor to fit the container within available space
-                var scaleX = targetWidth / referenceWidth;
-                var scaleY = targetHeight / referenceHeight;
-                var scale = Math.Min(scaleX, scaleY);
+                EnvironmentContainer.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentContainer.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 // Apply scale to wrapper instead of container to preserve LayoutBounds positioning
                 // Scale from center (0.5, 0.5) to maintain centering with HorizontalOptions="Center"
                 // This ensures proportional positioning works correctly on both platforms
                 EnvironmentWrapper.AnchorX = 0.5;
                 EnvironmentWrapper.AnchorY = 0.5;
-                EnvironmentWrapper.Scale = scale;
+                EnvironmentWrapper.Scale = screenProps.Scale;
                 
                 // Environment container settings
                 EnvironmentContainer.InputTransparent = false;
                 EnvironmentContainer.BackgroundColor = Colors.Transparent;
                 
-                // Calculate the actual scaled size
-                var scaledWidth = referenceWidth * scale;
-                var scaledHeight = referenceHeight * scale;
-                
                 // Set wrapper size to the reference size (before scaling)
                 // The scale transform will make it the correct visual size
-                EnvironmentWrapper.WidthRequest = referenceWidth;
-                EnvironmentWrapper.HeightRequest = referenceHeight;
-                
-                // Calculate center offset to ensure perfect centering after scaling
-                // The wrapper is centered, but we need to account for the scale transform
-                var offsetX = (targetWidth - scaledWidth) / 2.0;
-                var offsetY = (targetHeight - scaledHeight) / 2.0;
+                EnvironmentWrapper.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentWrapper.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 // Apply translation to fine-tune centering
-                EnvironmentWrapper.TranslationX = offsetX;
-                EnvironmentWrapper.TranslationY = offsetY;
+                EnvironmentWrapper.TranslationX = screenProps.OffsetX;
+                EnvironmentWrapper.TranslationY = screenProps.OffsetY;
                 
                 // Scale edge navigation buttons to match environment scale
                 // This ensures they appear the same size as elements in the environment
                 GreenhouseButton.AnchorX = 0;
-                GreenhouseButton.AnchorY = 0.5;
-                GreenhouseButton.Scale = scale;
+                GreenhouseButton.AnchorY = 1;
+                GreenhouseButton.Scale = screenProps.Scale;
                 
                 LaboratoryButton.AnchorX = 1;
-                LaboratoryButton.AnchorY = 0.5;
-                LaboratoryButton.Scale = scale;
+                LaboratoryButton.AnchorY = 1;
+                LaboratoryButton.Scale = screenProps.Scale;
                 
                 // Update station object positions from absolute coordinates
                 UpdateStationPositions();
@@ -155,15 +161,15 @@ public partial class HubPage : ContentPage
                 // This ensures panels appear the same size on both platforms
                 MarketPanelBorder.AnchorX = 0.5;
                 MarketPanelBorder.AnchorY = 0.5;
-                MarketPanelBorder.Scale = scale;
+                MarketPanelBorder.Scale = screenProps.Scale;
                 
                 QuestPanelBorder.AnchorX = 0.5;
                 QuestPanelBorder.AnchorY = 0.5;
-                QuestPanelBorder.Scale = scale;
+                QuestPanelBorder.Scale = screenProps.Scale;
                 
                 StatsPanelBorder.AnchorX = 0.5;
                 StatsPanelBorder.AnchorY = 0.5;
-                StatsPanelBorder.Scale = scale;
+                StatsPanelBorder.Scale = screenProps.Scale;
             }
         }
 #endif
@@ -208,12 +214,12 @@ public partial class HubPage : ContentPage
     // Navigation to other pages
     private async void OnGreenhouseClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("//GreenhousePage");
+        await NavigationService.NavigateWithFadeAsync("//GreenhousePage");
     }
 
     private async void OnLaboratoryClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("//LaboratoryPage");
+        await NavigationService.NavigateWithFadeAsync("//LaboratoryPage");
     }
 
     // Panel controls

@@ -9,16 +9,16 @@
 ## 🎮 Core Gameplay
 
 ### Space Station Areas
-- **🛰️ Hub**: Central command center for managing all station external operations
-- **🌿 Greenhouse**: Cultivation area for growing and maintaining your plant collection
-- **🔬 Laboratory**: Research facility for breeding, genetic modification, and chemical extraction
+- **🛰️ Hub**: Command center for quests, trading, expeditions
+- **🌿 Greenhouse**: Grow and maintain your plant collection
+- **🔬 Laboratory**: Research, breeding, and chemical extraction
 
-### Gameplay Systems (Planned)
-- Cultivation, breeding, trading, research, quests, and expeditions
+### Coming Soon
+- Plant cultivation mechanics, breeding system, trading, quests, expeditions
 
 ## 🛠️ Tech Stack
 
-- **Framework**: .NET 9.0 MAUI (standard libraries only)
+- **Framework**: .NET 9.0 MAUI (standard libraries only, no Community Toolkit)
 - **Platforms**: Windows & Android
 - **Architecture**: MVVM with data binding
 - **Storage**: JSON files in local app data
@@ -44,7 +44,9 @@ Outgrowth/
 │   ├── StationObject.cs  # Interactive station elements
 │   ├── FurnitureObject.cs # Decorative furniture
 │   └── AnimatedPotObject.cs # Animated pot with pulse effect
-├── Services/             # Business logic (coming soon)
+├── Services/             # Application services
+│   ├── NavigationService.cs    # Animated page navigation with fade transitions
+│   └── ScreenProperties.cs     # Screen size and scale calculations
 ├── Platforms/            # Platform-specific code
 └── Resources/            # Images, fonts, styles, and other assets
 ```
@@ -83,6 +85,7 @@ dotnet build -f net9.0-android
 ### Currently Implemented
 - ✅ Cross-platform foundation (Windows & Android)
 - ✅ MVVM architecture with data binding
+- ✅ Smooth page navigation with fade transitions (`NavigationService`)
 - ✅ Complete navigation system (Main Menu → Hub → Greenhouse/Laboratory)
 - ✅ **Hub Page**: Interactive command center with Market, Quest Console, Statistics
 - ✅ **Greenhouse Page**: Dynamic pot system (5 pots, navigation on Android), resource panels
@@ -93,7 +96,7 @@ dotnet build -f net9.0-android
   - `FurnitureObject` - Decorative furniture items
   - `AnimatedPotObject` - Pots with pulse animation
   - Interfaces: `IInteractable`, `IAnimated` for extensibility
-- ✅ Responsive design with automatic scaling (16:9 aspect ratio)
+- ✅ Responsive design with automatic scaling (16:9 aspect ratio, `ScreenProperties`)
 - ✅ Android immersive fullscreen mode
 
 ### Coming Soon
@@ -105,7 +108,7 @@ dotnet build -f net9.0-android
 
 ## 🎨 Design
 
-Calm, methodical gameplay with a scientific approach to plant breeding. Solo experience in a space station atmosphere-
+Calm, methodical gameplay with a scientific approach to plant breeding. Solo experience in a space station atmosphere.
 
 ## 📝 Academic Project
 

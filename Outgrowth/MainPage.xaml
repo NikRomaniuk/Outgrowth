@@ -89,6 +89,17 @@
                 
             </VerticalStackLayout>
         </ScrollView>
+        
+        <!-- Fade Overlay for Android Navigation Transitions -->
+        <BoxView x:Name="FadeOverlay"
+                 Color="Black"
+                 Opacity="0"
+                 IsVisible="False"
+                 ZIndex="10000"
+                 InputTransparent="True"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill"
+                 Margin="-10"/>
     </Grid>
 
 </ContentPage>

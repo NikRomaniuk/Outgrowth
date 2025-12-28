@@ -129,6 +129,12 @@ All panels (Market, Quest, Statistics) use the same interaction pattern:
 - **Auto-close**: Panels close when navigating away (Disappearing event)
 - **Visibility**: Uses `IsVisible`
 
+#### 9.1.7 Navigation Service Integration
+
+HubPage uses `NavigationService.NavigateWithFadeAsync()` for smooth fade transitions:
+- Fade-to-black animation when navigating to/from HubPage
+- Platform-specific overlay management (Windows: shared overlay, Android: per-page overlay)
+
 ### 9.3 GreenhousePage Implementation
 
 #### 9.3.1 Layout Architecture
@@ -148,11 +154,11 @@ Grid (ColumnDefinitions="Auto,*,Auto")
 │       └── AbsoluteLayout (EnvironmentContainer)
 │           └── AbsoluteLayout (ContentContainer - moves as whole unit)
 │               └── Pots created dynamically from PotObject instances
-│                   ├── Pot 1 (X: 9400, Y: 0)
-│                   ├── Pot 2 (X: 9000, Y: 0)
-│                   ├── Pot 3 (X: 8600, Y: 0)
-│                   ├── Pot 4 (X: 8200, Y: 0)
-│                   └── Pot 5 (X: 7800, Y: 0)
+│                   ├── Pot 1 (X: 9400, Y: -200)
+│                   ├── Pot 2 (X: 9000, Y: -200)
+│                   ├── Pot 3 (X: 8600, Y: -200)
+│                   ├── Pot 4 (X: 8200, Y: -200)
+│                   └── Pot 5 (X: 7800, Y: -200)
 └── Column 2: Right Gutter (Hub Button)
     └── AbsoluteLayout (ZIndex="1000")
         └── VerticalStackLayout (HubButton)
@@ -204,11 +210,11 @@ The GreenhousePage implements a navigation system for browsing pots using the `P
   - Pots are added to `ContentContainer` dynamically in `CreatePotElements()` method
   - No pots are hardcoded in XAML - all created programmatically
 - **Absolute Coordinates**: Pots use absolute coordinate system with 1:1 pixel-to-logical-unit ratio:
-  - Pot 1: X=9400, Y=0 (rightmost, centered vertically)
-  - Pot 2: X=9000, Y=0 (second from right - starting position)
-  - Pot 3: X=8600, Y=0 (center)
-  - Pot 4: X=8200, Y=0 (second from left)
-  - Pot 5: X=7800, Y=0 (leftmost, centered vertically)
+  - Pot 1: X=9400, Y=-200
+  - Pot 2: X=9000, Y=-200
+  - Pot 3: X=8600, Y=-200
+  - Pot 4: X=8200, Y=-200
+  - Pot 5: X=7800, Y=-200
 - **Coordinate System**: 
   - X Range: -9600 to 9600 (ContentContainer width: 19200px, 1:1 ratio)
   - Y Range: -540 to 540 (ContentContainer height: 1080px, 1:1 ratio)
@@ -222,15 +228,18 @@ The GreenhousePage implements a navigation system for browsing pots using the `P
   - **Navigation Restricted**: Only Pot2, Pot3, Pot4 are accessible (indices 1-3)
   - Pot1 and Pot5 are not accessible via navigation (indices 0 and 4)
 - **Centering Logic**: `UpdateContentPosition()` calculates offset to center selected pot
+  - Formula: `translationOffset = screenCenter - itemCenterX`
   - Target center: X = 960px (screen center in EnvironmentContainer)
+  - Container center: X = 9600px (ContentContainer center)
   - Uses `TranslationX` to shift entire ContentContainer
-  - Calculates offset from pot's center position to screen center
+  - Item center: `itemCenterX = containerCenter + logicalX` (1:1 ratio)
 
 #### 9.3.4 Scale Transform System
 
-Uses the same scale transform system as HubPage and LaboratoryPage:
-- **Reference Size**: 1920x1080 (Windows base)
-- **Environment Scale**: Calculated to fit screen, applied to EnvironmentWrapper
+Uses `ScreenProperties` service for centralized scale calculations:
+- **Reference Size**: 1920×1080 (Windows base, defined in ScreenProperties.ReferenceWidth/ReferenceHeight)
+- **Environment Scale**: Calculated via `ScreenProperties.UpdateScreenProperties()`, applied to EnvironmentWrapper
+- **Scale Calculation**: `scale = min(scaleX, scaleY)` where `scaleX = TargetWidth / ReferenceWidth`, `scaleY = TargetHeight / ReferenceHeight`
 - **HubButton Scale**: Scales with environment scale
 - **Placeholder Scale**: LeftGutterPlaceholder scales with button scale to maintain column width
 
@@ -331,9 +340,9 @@ Uses the same scale transform system as HubPage:
 
 #### 9.2.3 Automatic Font Sizing System
 
-Font sizes automatically scale based on screen width:
-- **Base Reference**: Windows 1920px width = scale 1.0
-- **Scale Calculation**: `fontScale = pageWidth / 1920.0`
+Font sizes automatically scale based on screen width using `ScreenProperties.FontScale`:
+- **Base Reference**: Windows 1920px width = scale 1.0 (ScreenProperties.WindowsBaseWidth)
+- **Scale Calculation**: `fontScale = pageWidth / 1920.0` (calculated by ScreenProperties)
 - **Dynamic Resources**: Font sizes updated in code-behind using Resources dictionary
 - **Resources**: `ResourcePanelTitleSize`, `ResourcePanelBodySize`, `ResourcePanelQtySize`, `ResourcePanelIconSize`
 - **Base Values**: Title=40, Body=30, Qty=24, Icon=40 (Windows base)
@@ -431,6 +440,9 @@ Outgrowth/
     │   ├── EnvObject.cs                 # Base class for environment objects
     │   ├── PotObject.cs                 # Pot object implementation
     │   └── FurnitureObject.cs           # Furniture object implementation
+    ├── Services/                    # Application services
+    │   ├── NavigationService.cs         # Animated page navigation with fade transitions
+    │   └── ScreenProperties.cs          # Screen size and scale calculations
     ├── Platforms/                   # Platform-specific code
     │   ├── Android/
     │   ├── iOS/
@@ -493,11 +505,11 @@ Outgrowth/
       - Greenhouse (left gutter, navigation to GreenhousePage)
       - Laboratory (right gutter, navigation to LaboratoryPage)
     - **Environment Elements** (positioned with AbsoluteLayout in center column using absolute coordinates):
-      - Market/Package (X: -50, Y: 0 - left of center, opens Market panel)
-      - Quest Console (X: 0, Y: 30 - center, above center, opens Quest panel)
-      - Statistics Blackboard (X: 50, Y: 0 - right of center, opens Statistics panel)
-      - **Absolute Coordinate System**: X Range: -100 to 100, Y Range: -100 to 100 (container: 1920px × 1080px)
-      - **Position Updates**: Coordinates defined in code-behind, positions set programmatically via `UpdateElementPositions()`
+      - Market/Package (X: -480, Y: 0 - left of center, opens Market panel)
+      - Quest Console (X: 0, Y: 162 - center, above center, opens Quest panel)
+      - Statistics Blackboard (X: 480, Y: 0 - right of center, opens Statistics panel)
+      - **Absolute Coordinate System**: X Range: -960 to 960, Y Range: -540 to 540 (container: 1920px × 1080px, 1:1 ratio)
+      - **Position Updates**: Coordinates defined in code-behind, positions set programmatically via `UpdateStationPositions()`
   - **16:9 Aspect Ratio**: Environment container uses reference size (1920x1080) with scale transform
   - **Cross-Platform Consistency**: Scale transform system ensures identical appearance on Android and Windows
   - **Font Size System**: Uses DynamicResource references defined in Styles.xaml
@@ -508,13 +520,13 @@ Outgrowth/
     - Column 0 (Left Gutter): LeftGutterPlaceholder + LiquidsPanel/SeedsPanel (mutually exclusive, ZIndex="1000")
     - Column 1 (Center): EnvironmentWrapper with 16:9 environment container (ZIndex="100")
       - ContentContainer: AbsoluteLayout containing all pots and future furniture (moves as whole unit)
-      - Container dimensions: 19200px × 1080px (19.2 × 1000 for X, 10.8 × 100 for Y)
-      - 5 pots positioned using absolute coordinates defined in code-behind (X: 600, 300, 0, -300, -600; Y: 0 for all)
+      - Container dimensions: 19200px × 1080px (1:1 pixel-to-logical-unit ratio)
+      - 5 pots positioned using absolute coordinates defined in code-behind (X: 9400, 9000, 8600, 8200, 7800; Y: -200 for all)
     - Column 2 (Right Gutter): Hub navigation button (ZIndex="1000")
   - **Absolute Coordinate System**: 
-    - X Range: -1000 to 1000 logical units (container width: 19200px)
-    - Y Range: -100 to 100 logical units (container height: 1080px)
-    - Coordinates defined only in code-behind, automatically converted to pixel positions
+    - X Range: -9600 to 9600 logical units (container width: 19200px, 1:1 ratio)
+    - Y Range: -540 to 540 logical units (container height: 1080px, 1:1 ratio)
+    - Coordinates defined only in code-behind, automatically converted to pixel positions via `PotObject.UpdatePosition()`
   - **ContentContainer System**: Generic container for all interactive items (pots, future furniture)
     - Moves as a whole unit using TranslationX for navigation
     - Generic implementation - easy to add new furniture items by adding coordinates to array
@@ -522,7 +534,9 @@ Outgrowth/
   - **Pots Navigation**: 
     - Left/Right arrow buttons (Android only) navigate between pots
     - Selected pot automatically centers on screen using calculated TranslationX offset
-    - Initial state: Pot 1 (rightmost) centered on page load
+    - Centering formula: `translationOffset = screenCenter - itemCenterX` (screenCenter=960, containerCenter=9600)
+    - Initial state: Pot 2 (second from right, index 1) centered on page load
+    - Navigation restricted to Pot2, Pot3, Pot4 (indices 1-3), Pot1 and Pot5 not accessible
   - **Bottom Panels**:
     - ToolsPanel: Always visible, bottom center, 3 icon-only buttons (Liquids, Seeds, Cancel)
     - MovePanel: Android-only, right of ToolsPanel, 2 arrow buttons (Left, Right)
@@ -542,8 +556,8 @@ Outgrowth/
     - Column 2 (Right Gutter): Resource list panel with placeholder (ZIndex="1000")
   - **Interactive Elements**:
     - **Edge Navigation**: Hub button (left gutter, navigation to HubPage)
-    - **Environment Elements**: ResourceSlotButton (X: 0, Y: 20 - center, above center), ExtractButton (X: 0, Y: -20 - center, below center)
-    - **Absolute Coordinate System**: X Range: -100 to 100, Y Range: -100 to 100 (container: 1920px × 1080px)
+    - **Environment Elements**: ResourceSlotButton (X: 0, Y: 108 - center, above center), ExtractButton (X: 0, Y: -108 - center, below center)
+    - **Absolute Coordinate System**: X Range: -960 to 960, Y Range: -540 to 540 (container: 1920px × 1080px, 1:1 ratio)
     - **Position Updates**: Coordinates defined in code-behind, positions set programmatically via `UpdateElementPositions()`
   - **Resource Panel**: Scrollable list with Grass, Lum, Coal items
   - **Automatic Scaling**: Font sizes and panel dimensions scale based on screen size (Windows 1920px base)
@@ -559,6 +573,17 @@ Outgrowth/
   - LaboratoryViewModel
 - Data binding ready for future features
 - Platform-specific code guards using `#if ANDROID || WINDOWS` directives
+
+#### Services
+- **NavigationService**: Animated page navigation with fade transitions
+  - Platform-specific implementations (Windows: single shared overlay, Android: static overlays per page)
+  - Fade-to-black transitions between pages
+  - Prevents simultaneous navigation
+- **ScreenProperties**: Centralized screen size and scale calculations
+  - Singleton service managing screen dimensions, scale factors, and font scales
+  - Calculates 16:9 environment dimensions with scale transforms
+  - Font scale calculation: Windows 1920px = scale 1.0
+  - Reference size: 1920×1080 for consistent scaling
 
 #### Environment Object System
 - **Generic Base Class**: `EnvObject` abstract class for all environment objects (pots, furniture, etc.)
@@ -687,7 +712,48 @@ using System.Text.Json;
 
 ---
 
-## 8. Contact & Resources
+## 8. Services
+
+### 8.1 NavigationService
+
+**Location**: `Outgrowth/Services/NavigationService.cs`
+
+Provides animated page navigation with fade transitions:
+- **Platform-Specific Implementation**:
+  - **Windows**: Single shared overlay moved between pages
+  - **Android**: Static overlays on each page (each page has its own FadeOverlay)
+- **Usage**: `await NavigationService.NavigateWithFadeAsync("//RouteName")`
+- **Features**:
+  - Fade-to-black transition when navigating away
+  - Black screen during navigation (page loads behind overlay)
+  - Fade-from-black transition when new page loads
+  - Prevents simultaneous navigation (uses `_isNavigating` flag)
+- **Initialization**: Called from `AppShell.xaml.cs` with fade overlay and Shell instance
+
+### 8.2 ScreenProperties
+
+**Location**: `Outgrowth/Services/ScreenProperties.cs`
+
+Centralized singleton service for screen size and scale calculations:
+- **Properties**:
+  - `PageWidth`, `PageHeight`: Current page dimensions
+  - `TargetWidth`, `TargetHeight`: 16:9 environment target dimensions
+  - `Scale`: Environment scale factor
+  - `ScaledWidth`, `ScaledHeight`: Actual scaled dimensions
+  - `OffsetX`, `OffsetY`: Centering offsets after scaling
+  - `FontScale`: Font scaling factor (Windows 1920px = 1.0)
+- **Constants**:
+  - `ReferenceWidth = 1920.0`: Design reference width
+  - `ReferenceHeight = 1080.0`: Design reference height
+  - `WindowsBaseWidth = 1920.0`: Base width for font scaling
+- **Methods**:
+  - `UpdateScreenProperties(pageWidth, pageHeight)`: Recalculates all properties based on current page size
+  - `Reset()`: Resets singleton instance (useful for testing)
+- **Usage**: `ScreenProperties.Instance.UpdateScreenProperties(width, height)` in page `OnPageSizeChanged` handler
+
+---
+
+## 9. Contact & Resources
 
 - **GitHub Repository**: https://github.com/NikRomaniuk/Outgrowth
 - **Instructor GitHub**: DonH-ITS
@@ -791,15 +857,6 @@ The project uses a generic environment object system for managing interactive el
 - **Consistent**: Centralized position calculation logic
 - **Generic**: Same coordinate system and update logic for all objects
 - **Extensible**: Interface-based design allows adding interaction and animation capabilities
-
-### Page Structure
-All environment pages use a consistent 3-column Grid layout:
-```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ Left Gutter â”‚  Center (Env)    â”‚ Right Gutterâ”‚
-â”‚   (Auto)    â”‚       (*)        â”‚   (Auto)    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-```
 
 ## Absolute Coordinate System
 
@@ -966,11 +1023,11 @@ VerticalStackLayout? element = name switch
 - **Right Gutter**: Laboratory navigation button
 
 #### Elements
-- **Market**: X = -50, Y = 0 (left of center, centered vertically)
-- **Quest Console**: X = 0, Y = 30 (center, above center)
-- **Statistics**: X = 50, Y = 0 (right of center, centered vertically)
-- **Coordinate System**: All elements use absolute coordinates defined in code-behind
-- **Position Updates**: `UpdateElementPositions()` converts logical coordinates to pixel positions automatically
+- **Market**: X = -480, Y = 0 (left of center, centered vertically)
+- **Quest Console**: X = 0, Y = 162 (center, above center)
+- **Statistics**: X = 480, Y = 0 (right of center, centered vertically)
+- **Coordinate System**: All elements use absolute coordinates defined in code-behind (1:1 pixel-to-logical-unit ratio)
+- **Position Updates**: `UpdateStationPositions()` converts logical coordinates to pixel positions automatically
 
 #### Panels
 - Market Panel, Quest Panel, Statistics Panel (overlay panels)
@@ -987,9 +1044,9 @@ VerticalStackLayout? element = name switch
 
 #### Pots
 - **Count**: 5 pots
-- **Positions**: All at Y = 0 (centered vertically)
-- **X Positions**: 600, 300, 0, -300, -600
+- **Positions**: X: 9400, 9000, 8600, 8200, 7800; Y: -200 (all pots)
 - **Navigation**: Left/Right arrows (Android) move ContentContainer
+- **Restricted Access**: Only Pot2, Pot3, Pot4 accessible (indices 1-3), starts at Pot2
 
 #### ContentContainer System
 - **Purpose**: Scrollable container for pots and future furniture
@@ -1011,9 +1068,9 @@ VerticalStackLayout? element = name switch
 - **Right Gutter**: Resource list panel with placeholder
 
 #### Elements
-- **Resource Slot**: X = 0, Y = 20 (center, above center)
-- **Extract Button**: X = 0, Y = -20 (center, below center)
-- **Coordinate System**: All elements use absolute coordinates defined in code-behind
+- **Resource Slot**: X = 0, Y = 108 (center, above center)
+- **Extract Button**: X = 0, Y = -108 (center, below center)
+- **Coordinate System**: All elements use absolute coordinates defined in code-behind (1:1 pixel-to-logical-unit ratio)
 - **Position Updates**: `UpdateElementPositions()` converts logical coordinates to pixel positions automatically
 
 #### Panels
@@ -1121,13 +1178,13 @@ All panels use consistent interaction pattern:
 **Last Updated**: December 26, 2025
 
 **Recent Updates**:
-- Added `EnvObject` and `PotObject` generic environment object system
-- Added `FurnitureObject` for decorative furniture items
-- Added `IInteractable` and `IAnimated` interfaces for extensible object behavior
-- Updated coordinate system to use 1:1 pixel-to-logical-unit ratio across all pages
-- Pots are now created dynamically from `PotObject` instances, not hardcoded in XAML
-- Navigation restricted to middle three pots (Pot2, Pot3, Pot4) in GreenhousePage
-- `PotObject` now implements `IInteractable` interface with `InteractAction` callback support
+- Added `NavigationService` for animated page navigation with fade transitions
+- Added `ScreenProperties` singleton service for centralized screen size and scale calculations
+- Updated GreenhousePage pot coordinates: X positions (9400, 9000, 8600, 8200, 7800), Y = -200 for all
+- Updated HubPage element coordinates: Market (-480, 0), QuestConsole (0, 162), Statistics (480, 0)
+- Updated LaboratoryPage element coordinates: ResourceSlot (0, 108), Extract (0, -108)
+- Added centering formula documentation: `translationOffset = screenCenter - itemCenterX`
+- Navigation starts at Pot2 (index 1), restricted to Pot2-Pot4 (indices 1-3)
 
 
 

@@ -1,5 +1,6 @@
 using Outgrowth.ViewModels;
 using Outgrowth.Models;
+using Outgrowth.Services;
 using System.Linq;
 #if WINDOWS
 using Outgrowth.Platforms.Windows;
@@ -9,22 +10,21 @@ namespace Outgrowth.Views;
 
 public partial class GreenhousePage : ContentPage
 {
-    // Current centered pot index (0 = Pot1 rightmost, increases left)
-    // Navigation limited to indices 1-3 (Pot2, Pot3, Pot4) - starts at Pot2
+    // Current centered pot index (0=Pot1 rightmost, increases left)
+    // Navigation limited to indices 1-3 (Pot2, Pot3, Pot4), starts at Pot2
     private int _currentItemIndex = 1;
     
 #if WINDOWS
     private WindowsInput? _windowsInput;
 #endif
     
-    // All pots - created dynamically on page load
     private readonly List<PotObject> _pots =
     [
-        new PotObject(1, 9400, 0),   // Pot 1 - rightmost, center vertically
-        new PotObject(2, 9000, 0),   // Pot 2 - center vertically
-        new PotObject(3, 8600, 0),   // Pot 3 - center, center vertically
-        new PotObject(4, 8200, 0),   // Pot 4 - center vertically
-        new PotObject(5, 7800, 0)    // Pot 5 - leftmost
+        new PotObject(1, 9400, -200, "pot_object_s001.png"),   // Pot 1 - rightmost
+        new PotObject(2, 9000, -200, "pot_object_s001.png"),   // Pot 2 - starting position
+        new PotObject(3, 8600, -200, "pot_object_s001.png"),   // Pot 3 - center
+        new PotObject(4, 8200, -200, "pot_object_s001.png"),   // Pot 4
+        new PotObject(5, 7800, -200, "pot_object_s001.png")    // Pot 5 - leftmost
     ];
     
     private int[] BaseItemPositions => _pots.Select(p => p.X).ToArray();
@@ -34,14 +34,12 @@ public partial class GreenhousePage : ContentPage
         InitializeComponent();
         BindingContext = new GreenhouseViewModel();
         
-        // Set up pot click handlers using new architecture
         foreach (var pot in _pots)
         {
             pot.Clicked += (sender, e) => OnPotClicked(pot);
             pot.InteractAction = () => HandlePotInteraction(pot.PotNumber);
         }
         
-        // Set MovePanel visibility based on platform
 #if ANDROID
         if (MovePanel != null)
         {
@@ -61,11 +59,10 @@ public partial class GreenhousePage : ContentPage
         UpdateContentPosition(); // Center Pot2 on load
         
 #if WINDOWS
-        // Attach Windows keyboard input handler
         _windowsInput = new WindowsInput(
             onLeftArrow: OnLeftArrowPressed,
             onRightArrow: OnRightArrowPressed,
-            onEscape: CloseAllPanels  // Close panels with Esc key
+            onEscape: CloseAllPanels
         );
         _windowsInput.Attach();
 #endif
@@ -74,23 +71,48 @@ public partial class GreenhousePage : ContentPage
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
         CloseAllPanels();
+        CleanupPotElements();
         
 #if WINDOWS
-        // Detach Windows keyboard input handler
         _windowsInput?.Detach();
         _windowsInput = null;
 #endif
     }
+    
+    private void CleanupPotElements()
+    {
+#if ANDROID || WINDOWS
+        if (ContentContainer == null)
+            return;
+        
+        foreach (var pot in _pots)
+        {
+            if (pot.VisualElement != null && ContentContainer.Children.Contains(pot.VisualElement))
+            {
+                // Clear gesture recognizers to prevent memory leaks
+                if (pot.VisualElement is Grid grid)
+                {
+                    foreach (var child in grid.Children)
+                    {
+                        if (child is Border border && border.GestureRecognizers.Count > 0)
+                        {
+                            border.GestureRecognizers.Clear();
+                        }
+                    }
+                }
+                
+                ContentContainer.Children.Remove(pot.VisualElement);
+            }
+        }
+#endif
+    }
 
 #if WINDOWS
-    /// <summary>
-    /// Handles Left Arrow or A key press on Windows (moves camera left)
-    /// </summary>
     private void OnLeftArrowPressed()
     {
         System.Diagnostics.Debug.WriteLine($"[Windows] Left Arrow/A pressed, current index: {_currentItemIndex}");
         
-        // Move left (increase index, max index = pots.Count - 2)
+        // Move left (increase index, max = pots.Count - 2)
         if (_currentItemIndex < _pots.Count - 2)
         {
             _currentItemIndex++;
@@ -103,14 +125,11 @@ public partial class GreenhousePage : ContentPage
         }
     }
     
-    /// <summary>
-    /// Handles Right Arrow or D key press on Windows (moves camera right)
-    /// </summary>
     private void OnRightArrowPressed()
     {
         System.Diagnostics.Debug.WriteLine($"[Windows] Right Arrow/D pressed, current index: {_currentItemIndex}");
         
-        // Move right (decrease index, min index = 1)
+        // Move right (decrease index, min = 1)
         if (_currentItemIndex > 1)
         {
             _currentItemIndex--;
@@ -136,59 +155,38 @@ public partial class GreenhousePage : ContentPage
             
             if (pageHeight > 0 && pageWidth > 0)
             {
-                var targetHeight = pageHeight;
-                var targetWidth = targetHeight * 16.0 / 9.0;
-                if (targetWidth > pageWidth)
-                {
-                    targetWidth = pageWidth;
-                    targetHeight = targetWidth * 9.0 / 16.0;
-                }
+                var screenProps = ScreenProperties.Instance;
+                screenProps.UpdateScreenProperties(pageWidth, pageHeight);
                 
-                const double referenceWidth = 1920.0;
-                const double referenceHeight = 1080.0;
-                
-                EnvironmentContainer.WidthRequest = referenceWidth;
-                EnvironmentContainer.HeightRequest = referenceHeight;
-                
-                var scaleX = targetWidth / referenceWidth;
-                var scaleY = targetHeight / referenceHeight;
-                var scale = Math.Min(scaleX, scaleY);
+                EnvironmentContainer.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentContainer.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 EnvironmentWrapper.AnchorX = 0.5;
                 EnvironmentWrapper.AnchorY = 0.5;
-                EnvironmentWrapper.Scale = scale;
-                EnvironmentWrapper.WidthRequest = referenceWidth;
-                EnvironmentWrapper.HeightRequest = referenceHeight;
+                EnvironmentWrapper.Scale = screenProps.Scale;
+                EnvironmentWrapper.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentWrapper.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 EnvironmentContainer.InputTransparent = false;
                 EnvironmentContainer.BackgroundColor = Colors.Transparent;
                 
-                var scaledWidth = referenceWidth * scale;
-                var scaledHeight = referenceHeight * scale;
-                var offsetX = (targetWidth - scaledWidth) / 2.0;
-                var offsetY = (targetHeight - scaledHeight) / 2.0;
-                EnvironmentWrapper.TranslationX = offsetX;
-                EnvironmentWrapper.TranslationY = offsetY;
+                EnvironmentWrapper.TranslationX = screenProps.OffsetX;
+                EnvironmentWrapper.TranslationY = screenProps.OffsetY;
                 
                 HubButton.AnchorX = 1;
-                HubButton.AnchorY = 0.5;
-                HubButton.Scale = scale;
+                HubButton.AnchorY = 1;
+                HubButton.Scale = screenProps.Scale;
                 
                 LeftGutterPlaceholder.AnchorX = 0;
                 LeftGutterPlaceholder.AnchorY = 0.5;
-                LeftGutterPlaceholder.Scale = scale;
+                LeftGutterPlaceholder.Scale = screenProps.Scale;
                 
-                const double windowsBaseWidth = 1920.0;
-                var fontScale = pageWidth / windowsBaseWidth;
+                UpdateFontSizes(screenProps.FontScale);
+                UpdatePanelSizes(screenProps.FontScale);
+                UpdateToolsPanelSize(screenProps.FontScale);
+                UpdateMovePanelSize(screenProps.FontScale);
                 
-                UpdateFontSizes(fontScale);
-                UpdatePanelSizes(fontScale);
-                UpdateToolsPanelSize(fontScale);
-                UpdateMovePanelSize(fontScale);
-                
-                // Update pot positions from absolute coordinates
                 UpdatePotPositions();
-                // Update content position after layout changes
                 UpdateContentPosition();
             }
         }
@@ -226,21 +224,17 @@ public partial class GreenhousePage : ContentPage
             toolsBorder.HeightRequest = panelHeight;
             toolsBorder.Padding = panelPadding;
             
-            // Calculate button size based on panel height: Button size = Panel height - margin (2 * padding)
+            // Button size = panel height - (2 * padding)
             var buttonSize = panelHeight - (2 * panelPadding);
             
-            // Scale button layout spacing
             if (ToolsButtonsLayout != null)
             {
                 ToolsButtonsLayout.Spacing = baseSpacing * fontScale;
             }
             
-            // Scale individual buttons (width and height = buttonSize for square buttons)
             if (LiquidsButton != null && SeedsButton != null && CancelButton != null)
             {
-                // Button padding scales proportionally to button size
                 var buttonPadding = buttonSize * 0.15; // 15% of button size
-                // Icon size scales proportionally to button size
                 var iconSize = buttonSize * 0.5; // 50% of button size
                 
                 LiquidsButton.WidthRequest = buttonSize;
@@ -283,21 +277,17 @@ public partial class GreenhousePage : ContentPage
             moveBorder.HeightRequest = panelHeight;
             moveBorder.Padding = panelPadding;
             
-            // Calculate button size based on panel height: Button size = Panel height - margin (2 * padding)
+            // Button size = panel height - (2 * padding)
             var buttonSize = panelHeight - (2 * panelPadding);
             
-            // Scale button layout spacing
             if (MoveButtonsLayout != null)
             {
                 MoveButtonsLayout.Spacing = baseSpacing * fontScale;
             }
             
-            // Scale individual buttons (width and height = buttonSize for square buttons)
             if (LeftArrowButton != null && RightArrowButton != null)
             {
-                // Button padding scales proportionally to button size
                 var buttonPadding = buttonSize * 0.15; // 15% of button size
-                // Icon size scales proportionally to button size
                 var iconSize = buttonSize * 0.5; // 50% of button size
                 
                 LeftArrowButton.WidthRequest = buttonSize;
@@ -308,7 +298,6 @@ public partial class GreenhousePage : ContentPage
                 RightArrowButton.HeightRequest = buttonSize;
                 RightArrowButton.Padding = buttonPadding;
                 
-                // Scale icon font sizes
                 if (LeftArrowIcon != null && RightArrowIcon != null)
                 {
                     LeftArrowIcon.FontSize = iconSize;
@@ -334,27 +323,19 @@ public partial class GreenhousePage : ContentPage
 
     private async void OnHubClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("//HubPage");
+        await NavigationService.NavigateWithFadeAsync("//HubPage");
     }
 
-    /// <summary>
-    /// Handles interaction logic for pots (via InteractAction)
-    /// </summary>
     private void HandlePotInteraction(int potNumber)
     {
-        // TODO: Add pot interaction logic (plant selection, watering, etc.)
+        // TODO: Add pot interaction logic
         System.Diagnostics.Debug.WriteLine($"Pot {potNumber} interacted via IInteractable.OnInteract()");
     }
 
-    /// <summary>
-    /// Universal handler for pot click events
-    /// </summary>
-    /// <param name="pot">The pot object that was clicked</param>
     private void OnPotClicked(PotObject pot)
     {
         System.Diagnostics.Debug.WriteLine($"Pot {pot.PotNumber} (ID: {pot.Id}) clicked");
-        // TODO: Add pot-specific click logic here
-        // Example: Open pot details, show plant info, etc.
+        // TODO: Add pot-specific click logic
     }
 
     private void OnLiquidsButtonClicked(object sender, EventArgs e)
@@ -401,7 +382,7 @@ public partial class GreenhousePage : ContentPage
     private void OnLeftArrowButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        // Move left (max index = last pot index - 1)
+        // Move left (max = pots.Count - 2)
         if (_currentItemIndex < _pots.Count - 2)
         {
             _currentItemIndex++;
@@ -413,7 +394,7 @@ public partial class GreenhousePage : ContentPage
     private void OnRightArrowButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        // Move right (min index 1 = Pot2)
+        // Move right (min = 1, Pot2)
         if (_currentItemIndex > 1)
         {
             _currentItemIndex--;
@@ -422,9 +403,6 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    /// <summary>
-    /// Creates pot UI elements and adds them to ContentContainer
-    /// </summary>
     private void CreatePotElements()
     {
 #if ANDROID || WINDOWS
@@ -439,9 +417,7 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    /// <summary>
-    /// Updates pot positions using 1:1 coordinate system (container center: X=9600, Y=540)
-    /// </summary>
+    // Updates pot positions (container center: X=9600, Y=540, 1:1 ratio)
     private void UpdatePotPositions()
     {
 #if ANDROID || WINDOWS
@@ -458,10 +434,7 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    /// <summary>
-    /// Centers the selected pot by moving ContentContainer
-    /// Formula: translationOffset = screenCenter - itemCenterX
-    /// </summary>
+    // Centers selected pot: translationOffset = screenCenter - itemCenterX
     private void UpdateContentPosition()
     {
 #if ANDROID || WINDOWS
@@ -472,7 +445,6 @@ public partial class GreenhousePage : ContentPage
         const double containerCenter = 9600.0;
         const double screenCenter = 960.0;
         
-        // Convert to pixel position and center on screen
         double itemCenterX = containerCenter + currentItemLogicalX; // 1:1 ratio
         double translationOffset = screenCenter - itemCenterX;
         
@@ -483,7 +455,6 @@ public partial class GreenhousePage : ContentPage
     private void OnBackgroundOverlayTapped(object sender, EventArgs e)
     {
 #if ANDROID
-        // Only close panels on tap for Android (Windows uses Esc key)
         CloseAllPanels();
 #endif
     }

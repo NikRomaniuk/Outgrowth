@@ -1,19 +1,21 @@
 namespace Outgrowth.Models;
 
-/// <summary>
-/// Interactive pot for the greenhouse. Clickable with icon, label, and separator.
-/// </summary>
+// Interactive pot for the greenhouse
 public class PotObject : EnvObject, IInteractable
 {
     public int PotNumber { get; set; }
+    public string ImageSource { get; set; }
     public event EventHandler<TappedEventArgs>? Clicked;
     public Action? InteractAction { get; set; }
     public bool CanInteract { get; set; } = true;
     
-    public PotObject(int potNumber, int x, int y) 
-        : base($"Pot{potNumber}", x, y, 300, 300, "🪴")
+    public object? PlantSlot { get; set; } // Will be PlantObject when implemented
+    
+    public PotObject(int potNumber, int x, int y, string imageSource) 
+        : base($"Pot{potNumber}", x, y, 320, 320, "")
     {
         PotNumber = potNumber;
+        ImageSource = imageSource;
     }
     
     public void OnInteract()
@@ -24,74 +26,67 @@ public class PotObject : EnvObject, IInteractable
     
     public override View CreateVisualElement()
     {
-        var stackLayout = new VerticalStackLayout { Spacing = 10 };
+        var mainGrid = new Grid
+        {
+            WidthRequest = Width,
+            HeightRequest = Height
+        };
         
-        // Main border with pot icon
-        var border = new Border
+        var potBorder = new Border
         {
             StrokeThickness = 0,
             BackgroundColor = Colors.Transparent,
-            HeightRequest = 300,
-            WidthRequest = 300
+            HeightRequest = Height,
+            WidthRequest = Width
         };
         
-        // Add tap gesture for interactivity
         var tapGesture = new TapGestureRecognizer();
         tapGesture.Tapped += (sender, e) =>
         {
             Clicked?.Invoke(sender, e);
             OnInteract();
         };
-        border.GestureRecognizers.Add(tapGesture);
+        potBorder.GestureRecognizers.Add(tapGesture);
         
-        var grid = new Grid();
-        grid.Children.Add(new BoxView { Color = Color.FromArgb("#5D4037"), CornerRadius = 10, Opacity = 0.5 });
-        
-        var iconLabel = new Label
+        var potImage = new Image
         {
-            Text = BaseSprite,
-            HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.Center
+            Source = ImageSource,
+            Aspect = Aspect.Fill,
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill
         };
-        iconLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonIconSize");
-        grid.Children.Add(iconLabel);
         
-        var placeholderLabel = new Label
+        potBorder.Content = potImage;
+        mainGrid.Children.Add(potBorder);
+        
+        // Plant slot: bottom edge touches pot center (Margin: -Height/2)
+        var slotBorder = new Border
         {
-            Text = $"[Pot {PotNumber}]",
+            Stroke = Color.FromArgb("#4CAF50"),
+            StrokeThickness = 2,
+            BackgroundColor = Colors.Transparent,
+            HeightRequest = Height,
+            WidthRequest = Width,
             HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.End,
-            Margin = new Thickness(0, 0, 0, 10),
-            TextColor = Colors.White,
-            Opacity = 0.7
+            VerticalOptions = LayoutOptions.Start,
+            Margin = new Thickness(0, -Height / 2, 0, 0)
         };
-        placeholderLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonPlaceholderSize");
-        grid.Children.Add(placeholderLabel);
         
-        border.Content = grid;
-        stackLayout.Children.Add(border);
-        
-        // Separator line and label
-        stackLayout.Children.Add(new BoxView
+        var slotLabel = new Label
         {
-            Color = Color.FromArgb("#4CAF50"),
-            HeightRequest = 3,
-            WidthRequest = 300,
-            HorizontalOptions = LayoutOptions.Center
-        });
-        
-        var potLabel = new Label
-        {
-            Text = $"Pot {PotNumber}",
-            FontAttributes = FontAttributes.Bold,
+            Text = "[Small Plant Slot]",
             HorizontalOptions = LayoutOptions.Center,
-            TextColor = Colors.White
+            VerticalOptions = LayoutOptions.Center,
+            TextColor = Color.FromArgb("#4CAF50"),
+            Opacity = 0.5
         };
-        potLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonLabelSize");
-        stackLayout.Children.Add(potLabel);
+        slotLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonPlaceholderSize");
         
-        VisualElement = stackLayout;
-        return stackLayout;
+        slotBorder.Content = slotLabel;
+        mainGrid.Children.Add(slotBorder);
+        
+        VisualElement = mainGrid;
+        return mainGrid;
     }
 }
 

@@ -48,16 +48,32 @@ For objects with animation logic.
 
 Standard pot for growing plants.
 
+**Constructor:**
+```csharp
+PotObject(int potNumber, int x, int y, string imageSource)
+```
+
+**Properties:**
+- `PotNumber` - Pot identifier
+- `ImageSource` - Image file path for pot visualization
+- `PlantSlot` - Placeholder for future PlantObject implementation (`object?`)
+- `Clicked` - Event fired when pot is clicked/tapped
+- `InteractAction` - Optional callback action for interactions
+- `CanInteract` - Controls whether pot can be interacted with
+
 **Features:**
 - Clickable/tappable (implements `IInteractable`)
 - Fires `Clicked` event (`EventHandler<TappedEventArgs>?`)
-- Executes `InteractAction` delegate (`Action?`)
+- Executes `InteractAction` delegate (`Action?`) when tapped
 - Can be enabled/disabled via `CanInteract` property
-- Uses DynamicResource for font sizes (ButtonIconSize, ButtonPlaceholderSize, ButtonLabelSize)
+- Uses image source for pot visualization (rendered as Image with Aspect.Fill)
+- Includes plant slot overlay (Border with green stroke, positioned with negative margin -Height/2 to overlay above pot)
+- Uses DynamicResource for font sizes (ButtonPlaceholderSize for slot label)
+- Slot bottom edge touches pot center (visual overlay positioning)
 
 **Usage:**
 ```csharp
-var pot = new PotObject(1, 9000, 0); // potNumber, x, y
+var pot = new PotObject(1, 9000, -200, "pot_object_s001.png"); // potNumber, x, y, imageSource
 pot.InteractAction = () => OpenPlantDialog(1);
 pot.Clicked += (s, e) => Debug.WriteLine("Pot clicked!");
 pot.CanInteract = true; // Enable/disable interaction
@@ -109,7 +125,7 @@ Pot with animation (pulse/glow effect).
 
 **Usage:**
 ```csharp
-var pot = new AnimatedPotObject(1, 9000, 0); // potNumber, x, y
+var pot = new AnimatedPotObject(1, 9000, -200, "pot_object_s001.png"); // potNumber, x, y, imageSource
 pot.InteractAction = () => WaterPlant(1);
 pot.Clicked += (s, e) => Debug.WriteLine("Animated pot clicked!");
 pot.CanInteract = true;
@@ -329,9 +345,11 @@ private void UpdateStationPositions()
 // For GreenhousePage with PotObject:
 private readonly List<PotObject> _pots = new()
 {
-    new PotObject(1, 9400, 0),
-    new PotObject(2, 9000, 0),
-    new PotObject(3, 8600, 0)
+    new PotObject(1, 9400, -200, "pot_object_s001.png"),
+    new PotObject(2, 9000, -200, "pot_object_s001.png"),
+    new PotObject(3, 8600, -200, "pot_object_s001.png"),
+    new PotObject(4, 8200, -200, "pot_object_s001.png"),
+    new PotObject(5, 7800, -200, "pot_object_s001.png")
 };
 
 private void CreatePotElements()

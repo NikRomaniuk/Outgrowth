@@ -52,6 +52,9 @@
 		<MauiImage Include="Resources\Images\*" />
 		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
 		
+		<!-- Pot Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Pots\*" Resize="False" />
+		
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />
 

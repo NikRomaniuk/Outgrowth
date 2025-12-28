@@ -19,46 +19,35 @@
                        HorizontalOptions="Start"
                        VerticalOptions="Fill"
                        ZIndex="1000">
-            <VerticalStackLayout x:Name="GreenhouseButton"
-                                AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
-                                AbsoluteLayout.LayoutFlags="YProportional"
-                                Spacing="10"
-                                Margin="20,0,0,0">
-                <Border StrokeThickness="0"
-                        BackgroundColor="Transparent"
-                        HeightRequest="300"
-                        WidthRequest="300">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnGreenhouseClicked"/>
-                    </Border.GestureRecognizers>
-                    <Grid>
-                        <!-- Placeholder image area -->
-                        <BoxView Color="#2D5016"
-                                CornerRadius="10"
-                                Opacity="0.5"/>
-                        <Label Text="🌿"
-                               FontSize="{DynamicResource ButtonIconSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="Center"/>
-                        <Label Text="[GrHouse Image]"
-                               FontSize="{DynamicResource ButtonPlaceholderSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="End"
-                               Margin="0,0,0,10"
-                               TextColor="White"
-                               Opacity="0.7"/>
-                    </Grid>
-                </Border>
-                <BoxView Color="#FFD700" 
-                        HeightRequest="3" 
-                        WidthRequest="300"
-                        HorizontalOptions="Center"/>
-                <Label Text="Greenhouse"
-                       FontSize="{DynamicResource ButtonLabelSize}"
-                       FontAttributes="Bold"
-                       HorizontalOptions="Center"
-                       TextColor="White"/>
-            </VerticalStackLayout>
+            <Border x:Name="GreenhouseButton"
+                    AbsoluteLayout.LayoutBounds="0,1,AutoSize,AutoSize"
+                    AbsoluteLayout.LayoutFlags="YProportional"
+                    StrokeThickness="0"
+                    BackgroundColor="Transparent"
+                    HeightRequest="300"
+                    WidthRequest="300"
+                    Margin="20,0,0,20">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnGreenhouseClicked"/>
+                </Border.GestureRecognizers>
+                <Grid>
+                    <!-- Placeholder image area -->
+                    <BoxView Color="#2D5016"
+                            CornerRadius="10"
+                            Opacity="0.5"/>
+                    <Label Text="🌿"
+                           FontSize="{DynamicResource ButtonIconSize}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+                    <Label Text="[GrHouse Image]"
+                           FontSize="{DynamicResource ButtonPlaceholderSize}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="End"
+                           Margin="0,0,0,10"
+                           TextColor="White"
+                           Opacity="0.7"/>
+                </Grid>
+            </Border>
         </AbsoluteLayout>
         
         <!-- Center Column: Environment (16:9 Aspect Ratio, Centered, Scaled by Height) -->
@@ -85,45 +74,34 @@
                        HorizontalOptions="End"
                        VerticalOptions="Fill"
                        ZIndex="1000">
-            <VerticalStackLayout x:Name="LaboratoryButton"
-                                AbsoluteLayout.LayoutBounds="1,0.5,AutoSize,AutoSize"
-                                AbsoluteLayout.LayoutFlags="XProportional,YProportional"
-                                Spacing="10"
-                                Margin="0,0,20,0">
-                <Border StrokeThickness="0"
-                        BackgroundColor="Transparent"
-                        HeightRequest="300"
-                        WidthRequest="300">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnLaboratoryClicked"/>
-                    </Border.GestureRecognizers>
-                    <Grid>
-                        <BoxView Color="#2C1A5F"
-                                CornerRadius="10"
-                                Opacity="0.5"/>
-                        <Label Text="🔬"
-                               FontSize="{DynamicResource ButtonIconSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="Center"/>
-                        <Label Text="[Lab Image]"
-                               FontSize="{DynamicResource ButtonPlaceholderSize}"
-                               HorizontalOptions="Center"
-                               VerticalOptions="End"
-                               Margin="0,0,0,10"
-                               TextColor="White"
-                               Opacity="0.7"/>
-                    </Grid>
-                </Border>
-                <BoxView Color="#FFD700" 
-                        HeightRequest="3" 
-                        WidthRequest="300"
-                        HorizontalOptions="Center"/>
-                <Label Text="Laboratory"
-                       FontSize="{DynamicResource ButtonLabelSize}"
-                       FontAttributes="Bold"
-                       HorizontalOptions="Center"
-                       TextColor="White"/>
-            </VerticalStackLayout>
+            <Border x:Name="LaboratoryButton"
+                    AbsoluteLayout.LayoutBounds="1,1,AutoSize,AutoSize"
+                    AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+                    StrokeThickness="0"
+                    BackgroundColor="Transparent"
+                    HeightRequest="300"
+                    WidthRequest="300"
+                    Margin="0,0,20,20">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnLaboratoryClicked"/>
+                </Border.GestureRecognizers>
+                <Grid>
+                    <BoxView Color="#2C1A5F"
+                            CornerRadius="10"
+                            Opacity="0.5"/>
+                    <Label Text="🔬"
+                           FontSize="{DynamicResource ButtonIconSize}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+                    <Label Text="[Lab Image]"
+                           FontSize="{DynamicResource ButtonPlaceholderSize}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="End"
+                           Margin="0,0,0,10"
+                           TextColor="White"
+                           Opacity="0.7"/>
+                </Grid>
+            </Border>
         </AbsoluteLayout>
         
         <!-- Overlay Panels (Initially Hidden) - Spans all columns -->
@@ -246,6 +224,18 @@
                 </VerticalStackLayout>
             </Border>
         </Grid>
+        
+        <!-- Fade Overlay for Android Navigation Transitions -->
+        <BoxView x:Name="FadeOverlay"
+                 Grid.ColumnSpan="3"
+                 Color="Black"
+                 Opacity="0"
+                 IsVisible="False"
+                 ZIndex="10000"
+                 InputTransparent="True"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill"
+                 Margin="-10"/>
         
     </Grid>
     

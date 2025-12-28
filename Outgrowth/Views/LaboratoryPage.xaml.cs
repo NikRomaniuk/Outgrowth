@@ -1,5 +1,6 @@
 using Outgrowth.ViewModels;
 using Outgrowth.Models;
+using Outgrowth.Services;
 using System.Linq;
 #if WINDOWS
 using Outgrowth.Platforms.Windows;
@@ -64,10 +65,39 @@ public partial class LaboratoryPage : ContentPage
     {
         CloseResourcePanel();
         
+        // Clean up dynamically created elements to prevent memory leaks
+        CleanupStationObjects();
+        
 #if WINDOWS
         // Detach Windows keyboard input handler
         _windowsInput?.Detach();
         _windowsInput = null;
+#endif
+    }
+    
+    /// <summary>
+    /// Cleans up station objects and their visual elements to prevent memory leaks
+    /// </summary>
+    private void CleanupStationObjects()
+    {
+#if ANDROID || WINDOWS
+        if (EnvironmentContainer == null)
+            return;
+        
+        // Remove all dynamically created elements from container
+        foreach (var station in _stationObjects)
+        {
+            if (station.VisualElement != null && EnvironmentContainer.Children.Contains(station.VisualElement))
+            {
+                // Clear gesture recognizers to break circular references
+                if (station.VisualElement is Border border && border.GestureRecognizers.Count > 0)
+                {
+                    border.GestureRecognizers.Clear();
+                }
+                
+                EnvironmentContainer.Children.Remove(station.VisualElement);
+            }
+        }
 #endif
     }
 
@@ -82,64 +112,42 @@ public partial class LaboratoryPage : ContentPage
             
             if (pageHeight > 0 && pageWidth > 0)
             {
-                // Calculate 16:9 target size (fit to height, clamp to width)
-                var targetHeight = pageHeight;
-                var targetWidth = targetHeight * 16.0 / 9.0;
-                if (targetWidth > pageWidth)
-                {
-                    targetWidth = pageWidth;
-                    targetHeight = targetWidth * 9.0 / 16.0;
-                }
+                // Update screen properties
+                var screenProps = ScreenProperties.Instance;
+                screenProps.UpdateScreenProperties(pageWidth, pageHeight);
                 
-                // Reference size: 1920x1080 (Windows base)
-                const double referenceWidth = 1920.0;
-                const double referenceHeight = 1080.0;
-                
-                EnvironmentContainer.WidthRequest = referenceWidth;
-                EnvironmentContainer.HeightRequest = referenceHeight;
-                
-                // Calculate scale to fit reference size within target size
-                var scaleX = targetWidth / referenceWidth;
-                var scaleY = targetHeight / referenceHeight;
-                var scale = Math.Min(scaleX, scaleY);
+                EnvironmentContainer.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentContainer.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 // Scale environment wrapper from center to maintain centering
                 EnvironmentWrapper.AnchorX = 0.5;
                 EnvironmentWrapper.AnchorY = 0.5;
-                EnvironmentWrapper.Scale = scale;
-                EnvironmentWrapper.WidthRequest = referenceWidth;
-                EnvironmentWrapper.HeightRequest = referenceHeight;
+                EnvironmentWrapper.Scale = screenProps.Scale;
+                EnvironmentWrapper.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentWrapper.HeightRequest = ScreenProperties.ReferenceHeight;
                 
                 EnvironmentContainer.InputTransparent = false;
                 EnvironmentContainer.BackgroundColor = Colors.Transparent;
                 
                 // Center offset: account for scale transform
-                var scaledWidth = referenceWidth * scale;
-                var scaledHeight = referenceHeight * scale;
-                var offsetX = (targetWidth - scaledWidth) / 2.0;
-                var offsetY = (targetHeight - scaledHeight) / 2.0;
-                EnvironmentWrapper.TranslationX = offsetX;
-                EnvironmentWrapper.TranslationY = offsetY;
+                EnvironmentWrapper.TranslationX = screenProps.OffsetX;
+                EnvironmentWrapper.TranslationY = screenProps.OffsetY;
                 
                 // Scale HubButton from left edge (matches environment scale)
                 HubButton.AnchorX = 0;
-                HubButton.AnchorY = 0.5;
-                HubButton.Scale = scale;
+                HubButton.AnchorY = 1;
+                HubButton.Scale = screenProps.Scale;
                 
                 // Scale placeholder from right edge (maintains column width, prevents offset)
                 ResourceListPlaceholder.AnchorX = 1;
                 ResourceListPlaceholder.AnchorY = 0.5;
-                ResourceListPlaceholder.Scale = scale;
+                ResourceListPlaceholder.Scale = screenProps.Scale;
                 
                 // Update station object positions from absolute coordinates
                 UpdateStationPositions();
                 
-                // Font scale: based on screen width (1920px = scale 1.0)
-                const double windowsBaseWidth = 1920.0;
-                var fontScale = pageWidth / windowsBaseWidth;
-                
-                UpdateFontSizes(fontScale);
-                UpdatePanelSize(fontScale, scale);
+                UpdateFontSizes(screenProps.FontScale);
+                UpdatePanelSize(screenProps.FontScale, screenProps.Scale);
             }
         }
 #endif
@@ -217,7 +225,7 @@ public partial class LaboratoryPage : ContentPage
     // Navigation
     private async void OnHubClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("//HubPage");
+        await NavigationService.NavigateWithFadeAsync("//HubPage");
     }
 
     // Panel controls
