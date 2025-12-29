@@ -56,7 +56,9 @@ PotObject(int potNumber, int x, int y, string imageSource)
 **Properties:**
 - `PotNumber` - Pot identifier
 - `ImageSource` - Image file path for pot visualization
-- `PlantSlot` - Placeholder for future PlantObject implementation (`object?`)
+- `PlantSlot` - `PlantObject?` property for storing planted plants
+  - When `PlantSlot == null`: No visual slot element (pot appears empty)
+  - When `PlantSlot != null`: Plant visual element rendered inside pot (320×320 container)
 - `Clicked` - Event fired when pot is clicked/tapped
 - `InteractAction` - Optional callback action for interactions
 - `CanInteract` - Controls whether pot can be interacted with
@@ -67,9 +69,13 @@ PotObject(int potNumber, int x, int y, string imageSource)
 - Executes `InteractAction` delegate (`Action?`) when tapped
 - Can be enabled/disabled via `CanInteract` property
 - Uses image source for pot visualization (rendered as Image with Aspect.Fill)
-- Includes plant slot overlay (Border with green stroke, positioned with negative margin -Height/2 to overlay above pot)
+- **Plant Slot System**:
+  - When `PlantSlot == null`: No visual slot element is rendered (pot appears empty)
+  - When `PlantSlot != null`: Plant's visual element is rendered inside pot
+    - Plant rendered in 320×320 container (Border with `StrokeThickness = 0`)
+    - Plant positioned to fill container (uses `PlantObject.CreateVisualElement()`)
+    - Plant size determined by `PlantSize` property (Small = 320×320 pixels)
 - Uses DynamicResource for font sizes (ButtonPlaceholderSize for slot label)
-- Slot bottom edge touches pot center (visual overlay positioning)
 
 **Usage:**
 ```csharp
@@ -139,6 +145,84 @@ await pot.StartAnimation(); // Start pulsing
 
 // ... later ...
 pot.StopAnimation(); // Stop pulsing
+```
+
+### PlantObject (EnvObject + IInteractable)
+
+Represents an interactive plant instance with automatic growth mechanics.
+
+**Constructor:**
+```csharp
+PlantObject(string id, string plantId, int x, int y)
+// id: Unique identifier (e.g., "plant_grass_3")
+// plantId: ID of plant type from PlantLibrary (e.g., "grass")
+// x, y: Center coordinates (inherited from EnvObject)
+```
+
+**Properties:**
+- `PlantId` - ID of plant type (from `PlantLibrary`)
+- `PlantDefinition` - `PlantData` instance from `PlantLibrary` (loaded on creation)
+- `PlantedAtCycle` - Cycle number when plant was planted (int)
+- `CyclesLived` - Total cycles since planting (int, used for growth calculation)
+- `CurrentStage` - Current growth stage (0 to max stage)
+- `BaseSprite` - Current sprite path (PNG image or emoji, updated on stage change)
+- `Width, Height` - Determined by `PlantSize` property (Small = 320×320 pixels)
+
+**Features:**
+- Clickable/tappable (implements `IInteractable`)
+- Fires `Clicked` event (`EventHandler<TappedEventArgs>?`) - used for harvesting
+- Fires `StageChanged` event (`EventHandler?`) - triggers auto-save
+- **Automatic Growth**:
+  - Subscribes to `PlantsManager.GrowthUpdate` event on creation
+  - Automatically advances growth stages based on `CyclesLived` and `GrowthStageCycles` from `PlantData`
+  - Handles multiple stage transitions if many cycles have passed
+  - Updates sprite automatically when stage changes
+- **Visual Rendering**:
+  - Uses `Image` for `.png` sprites (`Aspect.Fill`, fills 320×320 container)
+  - Uses `Label` for emoji/text sprites
+  - Sprite paths defined in `PlantLibrary.json` (`growthStageSprites` array)
+- **Harvesting**: `Harvest()` method unregisters plant from `PlantsManager` and removes from pot
+
+**Usage:**
+```csharp
+// Create plant from seed's PlantId
+var plant = new PlantObject($"plant_{seed.PlantId}_{pot.PotNumber}", seed.PlantId, 0, 0);
+
+// Place in pot
+pot.PlantSlot = plant;
+
+// Subscribe to events
+plant.StageChanged += (sender, e) => SavePlants();
+plant.Clicked += (sender, e) => OnPlantClicked(plant);
+
+// Register with PlantsManager (automatic growth)
+PlantsManager.Instance.RegisterPlant(plant);
+
+// Harvest plant
+plant.Harvest(); // Unregisters from PlantsManager, removes from pot
+```
+
+**Growth System:**
+```csharp
+// Plant automatically grows via PlantsManager
+// 1 cycle = 5 seconds
+// Growth stages defined in PlantLibrary.json (growthStageCycles array)
+
+// Example: Grass plant
+// Stage 0 → 1: 1 cycle
+// Stage 1 → 2: 1 cycle
+// Stage 2 → 3: 1 cycle
+// Stage 3 → 4: 2 cycles
+// Stage 4 → 5: 2 cycles
+// Stage 5: Fully grown (no further growth)
+
+// Plant calculates current stage from CyclesLived:
+// CyclesLived = 0 → Stage 0
+// CyclesLived = 1 → Stage 1
+// CyclesLived = 2 → Stage 2
+// CyclesLived = 3 → Stage 3
+// CyclesLived = 5 → Stage 4
+// CyclesLived = 7 → Stage 5 (fully grown)
 ```
 
 ### FurnitureObject (EnvObject only)
@@ -342,7 +426,7 @@ private void UpdateStationPositions()
     }
 }
 
-// For GreenhousePage with PotObject:
+// For GreenhousePage with PotObject and PlantObject:
 private readonly List<PotObject> _pots = new()
 {
     new PotObject(1, 9400, -200, "pot_object_s001.png"),
@@ -364,6 +448,68 @@ private void CreatePotElements()
     }
 }
 
+// Planting a seed in a pot:
+private void OnPotClicked(PotObject pot)
+{
+    if (_selectedSeed != null && pot.PlantSlot == null)
+    {
+        // Create plant from seed's PlantId
+        var plant = new PlantObject($"plant_{_selectedSeed.PlantId}_{pot.PotNumber}", 
+                                     _selectedSeed.PlantId, 0, 0);
+        
+        // Place plant in pot
+        pot.PlantSlot = plant;
+        
+        // Subscribe to plant events
+        plant.StageChanged += (sender, e) => SavePlants();
+        plant.Clicked += OnPlantClicked;
+        
+        // Register with PlantsManager for automatic growth
+        PlantsManager.Instance.RegisterPlant(plant);
+        
+        // Update pot visual to show plant
+        UpdatePotVisualElement(pot);
+        
+        // Save state
+        SavePlants();
+    }
+}
+
+// Harvesting a plant:
+private void OnPlantClicked(object? sender, TappedEventArgs e)
+{
+    if (sender is PlantObject plant && _isHarvesterSelected)
+    {
+        plant.Harvest(); // Unregisters from PlantsManager
+        
+        // Find pot containing this plant and clear PlantSlot
+        var pot = _pots.FirstOrDefault(p => p.PlantSlot == plant);
+        if (pot != null)
+        {
+            pot.PlantSlot = null;
+            UpdatePotVisualElement(pot);
+            SavePlants();
+        }
+    }
+}
+
+// Update pot visual after PlantSlot changes:
+private void UpdatePotVisualElement(PotObject pot)
+{
+    // Remove old visual element
+    if (pot.VisualElement != null && ContentContainer.Children.Contains(pot.VisualElement))
+    {
+        ContentContainer.Children.Remove(pot.VisualElement);
+    }
+    
+    // Create new visual element (includes plant if PlantSlot != null)
+    var newVisual = pot.CreateVisualElement();
+    ContentContainer.Children.Add(newVisual);
+    
+    // Update position
+    pot.UpdatePosition(9600.0, 540.0);
+}
+
 private void UpdatePotPositions()
 {
     // GreenhousePage: ContentContainer center is at (9600, 540)
@@ -377,14 +523,73 @@ private void UpdatePotPositions()
 }
 ```
 
+## Integration with Plant Growth System
+
+### PlantsManager Integration
+
+`PlantObject` instances automatically integrate with `PlantsManager` for growth updates:
+
+```csharp
+// PlantsManager triggers GrowthUpdate event every 5 seconds (1 cycle)
+// All registered plants subscribe to this event
+
+// Register plant (done automatically in PlantObject constructor or manually)
+PlantsManager.Instance.RegisterPlant(plant);
+
+// Plant's OnGrowthUpdate method is called every cycle
+// Plant calculates CyclesLived and advances stages automatically
+
+// Unregister plant (done automatically in Harvest() method)
+PlantsManager.Instance.UnregisterPlant(plant);
+```
+
+### Save/Load Integration
+
+`PlantObject` instances are saved/loaded via `PlantsSaveService`:
+
+```csharp
+// Save plants with pot mapping
+var potNumberToPlant = new Dictionary<int, PlantObject>();
+foreach (var pot in _pots)
+{
+    if (pot.PlantSlot != null)
+    {
+        potNumberToPlant[pot.PotNumber] = pot.PlantSlot;
+    }
+}
+PlantsSaveService.SavePlantsWithPotMapping(potNumberToPlant);
+
+// Load plants
+var savedPlants = PlantsSaveService.LoadPlants();
+foreach (var (potNumber, plantData) in savedPlants)
+{
+    var pot = _pots.FirstOrDefault(p => p.PotNumber == potNumber);
+    if (pot != null)
+    {
+        var plant = PlantObject.FromSaveData(
+            plantData.PlantId, 
+            potNumber, 
+            0, 0, 
+            plantData.PlantedAtCycle, 
+            plantData.CyclesLived
+        );
+        pot.PlantSlot = plant;
+        PlantsManager.Instance.RegisterPlant(plant);
+        plant.StageChanged += (sender, e) => SavePlants();
+        plant.Clicked += OnPlantClicked;
+    }
+}
+```
+
 ## Future Expansion Ideas
 
 ### New Interfaces
-- `IGrowable` - Objects that change over time (plants)
+- `IGrowable` - Objects that change over time (already implemented via PlantObject)
+- `IWaterable` - Objects that can be watered (for future watering mechanics)
 
 ### New Object Types
-- `PlantObject` - Growing plants with stages
 - `ToolObject` - Interactive tools (watering can, pruners)
+- `ResourceObject` - Collectible resources (fruits, seeds, extracts)
 
 ## Best Practices
 
@@ -400,4 +605,12 @@ private void UpdatePotPositions()
 8. **Create before animate** - Always create visual element before starting animation (for `IAnimated` objects)
 9. **Dynamic resources** - Use `SetDynamicResource()` for font sizes to support automatic scaling
 10. **Event handlers** - Set up `Clicked` events and `InteractAction` delegates after creating visual elements
+11. **Plant registration** - Always register `PlantObject` with `PlantsManager.Instance.RegisterPlant()` after creation
+12. **Plant unregistration** - Always unregister `PlantObject` with `PlantsManager.Instance.UnregisterPlant()` before removal (or use `Harvest()` method)
+13. **Pot visual updates** - Call `UpdatePotVisualElement(pot)` after changing `pot.PlantSlot` to refresh UI
+14. **Plant events** - Subscribe to `PlantObject.StageChanged` for auto-save, `PlantObject.Clicked` for harvesting
+15. **Plant size** - Plant size determined by `PlantSize` property in `PlantData` (Small = 320×320, Medium = 480×480, etc.)
+16. **Plant sprites** - PNG images use `Image` with `Aspect.Fill`, emoji sprites use `Label`
+17. **Cycle system** - All growth times in cycles (integers), not seconds (1 cycle = 5 seconds)
+18. **Plant slot rendering** - When `PlantSlot == null`, no visual slot element is rendered (pot appears empty)
 

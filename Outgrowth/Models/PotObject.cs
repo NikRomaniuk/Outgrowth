@@ -9,7 +9,10 @@ public class PotObject : EnvObject, IInteractable
     public Action? InteractAction { get; set; }
     public bool CanInteract { get; set; } = true;
     
-    public object? PlantSlot { get; set; } // Will be PlantObject when implemented
+    /// <summary>
+    /// Plant object placed in this pot's slot. Null if slot is empty
+    /// </summary>
+    public PlantObject? PlantSlot { get; set; }
     
     public PotObject(int potNumber, int x, int y, string imageSource) 
         : base($"Pot{potNumber}", x, y, 320, 320, "")
@@ -59,31 +62,29 @@ public class PotObject : EnvObject, IInteractable
         potBorder.Content = potImage;
         mainGrid.Children.Add(potBorder);
         
-        // Plant slot: bottom edge touches pot center (Margin: -Height/2)
-        var slotBorder = new Border
+        // Plant slot: only create and add to visual tree when plant exists
+        if (PlantSlot != null)
         {
-            Stroke = Color.FromArgb("#4CAF50"),
-            StrokeThickness = 2,
-            BackgroundColor = Colors.Transparent,
-            HeightRequest = Height,
-            WidthRequest = Width,
-            HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.Start,
-            Margin = new Thickness(0, -Height / 2, 0, 0)
-        };
-        
-        var slotLabel = new Label
-        {
-            Text = "[Small Plant Slot]",
-            HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.Center,
-            TextColor = Color.FromArgb("#4CAF50"),
-            Opacity = 0.5
-        };
-        slotLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonPlaceholderSize");
-        
-        slotBorder.Content = slotLabel;
-        mainGrid.Children.Add(slotBorder);
+            // Plant slot: bottom edge touches pot center (Margin: -Height/2)
+            var slotBorder = new Border
+            {
+                BackgroundColor = Colors.Transparent,
+                StrokeThickness = 0,
+                HeightRequest = Height,
+                WidthRequest = Width,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(0, -Height / 2, 0, 0)
+            };
+            
+            // Create visual element for the plant (coordinates are relative to slot, centered)
+            PlantSlot.X = 0;
+            PlantSlot.Y = 0;
+            var plantView = PlantSlot.CreateVisualElement();
+            slotBorder.Content = plantView;
+            
+            mainGrid.Children.Add(slotBorder);
+        }
         
         VisualElement = mainGrid;
         return mainGrid;

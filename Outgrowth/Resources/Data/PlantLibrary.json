@@ -1,0 +1,21 @@
+{
+  "plants": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "description": "Simple grass plant that grows quickly.",
+      "plantSize": "Small",
+      "growthStageSprites": ["grass_s00_v01.png","grass_s01_v01.png", "grass_s02_v01.png", "grass_s03_v01.png", "grass_s04_v01.png", "grass_s05_v01.png"],
+      "growthStageCycles": [1, 1, 1, 2, 2, 0]
+    },
+    {
+      "id": "lum_plant",
+      "name": "Lumnius Flower",
+      "description": "Oaoaoaooaoaoa",
+      "plantSize": "Small",
+      "growthStageSprites": ["🌱", "🌿", "🌸", "🌺"],
+      "growthStageCycles": [3, 4, 5, 0]
+    }
+  ]
+}
+

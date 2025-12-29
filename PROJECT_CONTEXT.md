@@ -1,6 +1,6 @@
 ﻿# Outgrowth - Project Context Document
 
-**Last Updated**: December 26, 2025
+**Last Updated**: December 29, 2025
 
 ## 10. Automatic Scaling Systems
 
@@ -278,21 +278,36 @@ The GreenhousePage has two bottom panels centered together:
 **LiquidsPanel and SeedsPanel**:
 - **Position**: Left gutter (Grid.Column="0"), overlapping
 - **Mutually Exclusive**: Only one panel visible at a time
-- **LiquidsPanel Content**: 
-  - Water (💧)
-  - Fertilizer (🧪)
-  - Growth Serum (⚗️)
-- **SeedsPanel Content**:
-  - Grass Seed (🌾)
-  - Flower Seed (🌸)
-  - Tree Seed (🌳)
+- **Dynamic Content**: Panels are populated dynamically from `LiquidLibrary` and `SeedLibrary` on page load
+  - `UpdateLiquidsPanel()`: Populates LiquidsPanel from `LiquidLibrary.GetAllLiquids()`
+  - `UpdateSeedsPanel()`: Populates SeedsPanel from `SeedLibrary.GetAllSeeds()`
+  - Items created programmatically via `CreateLiquidItem()` and `CreateSeedItem()` methods
+- **Platform-Specific Display**:
+  - **Android**: Items show icon + quantity (right-aligned), no names on items
+  - **Windows**: Items show icon + name + quantity
+- **Selection System**:
+  - `_selectedLiquid` and `_selectedSeed` track selected items
+  - Selected items highlighted with gold border (`#FFD700`)
+  - Only one item can be selected at a time (selecting one clears the other)
+  - Selection cleared when panels close or other tool is selected
+- **Selected Item Panels** (Android only):
+  - `SelectedLiquidPanel` and `SelectedSeedPanel` appear above main panels
+  - Display selected item name (no "Name:" label)
+  - Position: Y=0.15 (above main panel), Height=160
+  - Width: 250px (Android), 300px (Windows) - matches main panel width
+  - Hidden on Windows (only visible on Android)
 - **Scrolling**: Both panels use ScrollView for content
 - **Font Resources**: Use DynamicResource (ResourcePanelTitleSize, ResourcePanelBodySize, ResourcePanelQtySize, ResourcePanelIconSize)
 - **Close Behavior**: 
-  - Cancel button closes all panels
-  - Background overlay closes panels
+  - Cancel button closes all panels and clears selections
+  - Opening one panel closes the other and clears its selection
   - Auto-closes when navigating away
+  - **No background overlay** - panels only close via buttons (prevents conflicts with planting/harvesting)
 - **Scaling**: Panel dimensions scale with `fontScale`, fonts scale automatically
+- **Panel Widths**: 
+  - Android: 250px base width
+  - Windows: 300px base width
+  - LeftGutterPlaceholder: Always 300px (maintains column stability)
 
 #### 9.3.7 Automatic Scaling Systems
 
@@ -419,6 +434,7 @@ Outgrowth/
 ├── Outgrowth.sln                    # Solution file
 ├── README.md                        # Project readme
 ├── PROJECT_CONTEXT.md              # This file
+├── ENVIRONMENT_OBJECTS_ARCHITECTURE.md  # Environment objects documentation
 └── Outgrowth/                      # Main project folder
     ├── Outgrowth.csproj            # Project configuration
     ├── MauiProgram.cs              # App initialization
@@ -439,25 +455,77 @@ Outgrowth/
     ├── Models/                      # Data models and environment objects
     │   ├── EnvObject.cs                 # Base class for environment objects
     │   ├── PotObject.cs                 # Pot object implementation
-    │   └── FurnitureObject.cs           # Furniture object implementation
+    │   ├── PlantObject.cs               # Plant instance with growth mechanics
+    │   ├── PlantData.cs                 # Plant type definition
+    │   ├── PlantLibrary.cs              # Central library for plant types
+    │   ├── SeedData.cs                  # Seed definition
+    │   ├── SeedLibrary.cs              # Central library for seeds
+    │   ├── LiquidData.cs               # Liquid definition
+    │   ├── LiquidLibrary.cs            # Central library for liquids
+    │   ├── ResourceData.cs             # Resource definition
+    │   ├── ResourceLibrary.cs          # Central library for resources
+    │   ├── FurnitureObject.cs          # Furniture object implementation
+    │   ├── StationObject.cs            # Station element implementation
+    │   └── AnimatedPotObject.cs        # Animated pot with pulse effect
     ├── Services/                    # Application services
     │   ├── NavigationService.cs         # Animated page navigation with fade transitions
-    │   └── ScreenProperties.cs          # Screen size and scale calculations
+    │   ├── ScreenProperties.cs          # Screen size and scale calculations
+    │   ├── PersistentTimer.cs           # Timer that persists across app sessions
+    │   ├── PlantsManager.cs             # Manages all plants and growth updates
+    │   └── PlantsSaveService.cs         # Saves and loads plant states
     ├── Platforms/                   # Platform-specific code
     │   ├── Android/
+    │   │   ├── MainActivity.cs         # Android activity with immersive mode
+    │   │   ├── MainApplication.cs      # Android application class
+    │   │   ├── AndroidManifest.xml     # Android manifest
+    │   │   └── Resources/              # Android resources
     │   ├── iOS/
+    │   │   ├── AppDelegate.cs          # iOS app delegate
+    │   │   ├── Info.plist              # iOS info plist
+    │   │   └── Program.cs              # iOS entry point
     │   ├── MacCatalyst/
+    │   │   ├── AppDelegate.cs          # Mac Catalyst app delegate
+    │   │   └── Program.cs              # Mac Catalyst entry point
     │   ├── Tizen/
+    │   │   └── Main.cs                 # Tizen entry point
     │   └── Windows/
+    │       ├── App.xaml / App.xaml.cs  # Windows app entry point
+    │       ├── Package.appxmanifest    # Windows package manifest
+    │       └── WindowsInput.cs        # Windows input handling
     ├── Properties/
-    │   └── launchSettings.json
+    │   └── launchSettings.json        # Launch settings
     └── Resources/                   # App resources
         ├── AppIcon/                 # App icons
+        │   ├── appicon.svg
+        │   └── appiconfg.svg
+        ├── Data/                    # JSON data files
+        │   ├── PlantLibrary.json        # Plant type definitions
+        │   ├── SeedLibrary.json         # Seed definitions
+        │   ├── LiquidLibrary.json       # Liquid definitions
+        │   └── ResourceLibrary.json     # Resource definitions
         ├── Fonts/                   # Custom fonts
+        │   ├── OpenSans-Regular.ttf
+        │   └── OpenSans-Semibold.ttf
         ├── Images/                  # Image assets
+        │   ├── dotnet_bot.png
+        │   └── Sprites/              # Game sprites
+        │       ├── Plants/              # Plant sprites
+        │       │   └── Grass/           # Grass plant sprites
+        │       │       ├── grass_s00_v01.png
+        │       │       ├── grass_s01_v01.png
+        │       │       ├── grass_s02_v01.png
+        │       │       ├── grass_s03_v01.png
+        │       │       ├── grass_s04_v01.png
+        │       │       └── grass_s05_v01.png
+        │       └── Pots/               # Pot sprites
+        │           └── pot_object_s001.png
         ├── Raw/                     # Raw files
+        │   └── AboutAssets.txt
         ├── Splash/                  # Splash screen
+        │   └── splash.svg
         └── Styles/                  # XAML styles
+            ├── Colors.xaml             # Color definitions
+            └── Styles.xaml            # Style definitions
 ```
 
 ### 3.2 Key Configuration Files
@@ -538,13 +606,18 @@ Outgrowth/
     - Initial state: Pot 2 (second from right, index 1) centered on page load
     - Navigation restricted to Pot2, Pot3, Pot4 (indices 1-3), Pot1 and Pot5 not accessible
   - **Bottom Panels**:
-    - ToolsPanel: Always visible, bottom center, 3 icon-only buttons (Liquids, Seeds, Cancel)
+    - ToolsPanel: Always visible, bottom center, 4 icon-only buttons (Harvester ✂️, Liquids 💧, Seeds 🌱, Cancel ❌)
+      - HarvesterButton: Activates harvesting mode (highlights when active)
+      - LiquidsButton: Opens/closes LiquidsPanel (highlights when panel open)
+      - SeedsButton: Opens/closes SeedsPanel (highlights when panel open)
+      - CancelButton: Closes all panels and clears selections
     - MovePanel: Android-only, right of ToolsPanel, 2 arrow buttons (Left, Right)
     - Both panels centered together using Grid layout
   - **Side Panels** (Left Gutter):
-    - LiquidsPanel: Water, Fertilizer, Growth Serum (scrollable)
-    - SeedsPanel: Grass Seed, Flower Seed, Tree Seed (scrollable)
+    - LiquidsPanel: Dynamically populated from `LiquidLibrary` (scrollable)
+    - SeedsPanel: Dynamically populated from `SeedLibrary` (scrollable)
     - Mutually exclusive - only one visible at a time
+    - Selected item panels (Android only): Display selected item name above main panel
   - **Automatic Scaling**:
     - Buttons scale automatically based on panel height
     - Panels and fonts scale based on screen dimensions (Windows 1920px base)
@@ -584,6 +657,24 @@ Outgrowth/
   - Calculates 16:9 environment dimensions with scale transforms
   - Font scale calculation: Windows 1920px = scale 1.0
   - Reference size: 1920×1080 for consistent scaling
+- **PersistentTimer**: Timer that persists across app sessions
+  - Singleton service tracking elapsed time even when app is closed
+  - Saves/loads timestamp from local app data directory
+  - Used for calculating plant growth cycles
+  - File: `gametimer.json` in `FileSystem.AppDataDirectory/Data/`
+- **PlantsManager**: Manages all plant instances and growth updates
+  - Singleton service maintaining list of registered `PlantObject` instances
+  - Triggers `GrowthUpdate` event every 5 seconds (1 cycle)
+  - Tracks current cycle number (`CurrentCycle`)
+  - Plants subscribe to `GrowthUpdate` event for automatic stage progression
+  - File: `Outgrowth/Services/PlantsManager.cs`
+- **PlantsSaveService**: Saves and loads plant states
+  - Saves plant data with pot number mapping (`Dictionary<int, PlantObject>`)
+  - Tracks `LastSavedCycle` and `CurrentCycle` for time-based calculations
+  - Calculates cycles passed since last save using `PersistentTimer`
+  - Restores `PlantsManager.CurrentCycle` on load
+  - File: `plants_save.json` in `FileSystem.AppDataDirectory/Data/`
+  - Auto-saves on plant stage changes and page navigation
 
 #### Environment Object System
 - **Generic Base Class**: `EnvObject` abstract class for all environment objects (pots, furniture, etc.)
@@ -598,6 +689,31 @@ Outgrowth/
   - Event handler support for pot interactions (`Clicked` event, `InteractAction` callback)
   - `CanInteract` property controls interaction availability
   - Uses DynamicResource for font sizes (ButtonIconSize, ButtonPlaceholderSize, ButtonLabelSize)
+  - **PlantSlot Property**: `PlantObject?` property for storing planted plants
+    - When `PlantSlot == null`: No visual slot element (pot appears empty)
+    - When `PlantSlot != null`: Plant visual element rendered inside pot (320×320 container)
+    - Plant positioned and sized automatically via `PlantObject.CreateVisualElement()`
+- **PlantObject Implementation**: Represents interactive plant instances
+  - Inherits from `EnvObject` and implements `IInteractable`
+  - **Properties**:
+    - `PlantId`: ID of plant type (from `PlantLibrary`)
+    - `PlantedAtCycle`: Cycle number when plant was planted
+    - `CyclesLived`: Total cycles since planting
+    - `CurrentStage`: Current growth stage (0 to max stage)
+    - `BaseSprite`: Current sprite path (PNG image or emoji)
+  - **Growth System**:
+    - Subscribes to `PlantsManager.GrowthUpdate` event
+    - Automatically advances stages based on `CyclesLived` and `GrowthStageCycles` from `PlantData`
+    - Handles multiple stage transitions if many cycles have passed
+    - `StageChanged` event triggers auto-save
+  - **Visual Rendering**:
+    - Uses `Image` for `.png` sprites (Aspect.Fill, fills 320×320 container)
+    - Uses `Label` for emoji/text sprites
+    - Size determined by `PlantSize` property (Small = 320×320)
+  - **Events**:
+    - `Clicked`: Fired when plant is tapped (for harvesting)
+    - `StageChanged`: Fired when growth stage changes (for auto-save)
+  - **Harvesting**: `Harvest()` method unregisters plant from `PlantsManager` and removes from pot
 - **FurnitureObject Implementation**: Concrete implementation for decorative furniture (tables, shelves, lights, etc.)
   - Inherits from `EnvObject`
   - Creates furniture UI elements dynamically (Border, icon, optional display name)
@@ -612,12 +728,56 @@ Outgrowth/
   - Consistent coordinate system across all objects
   - Interface-based design for extensibility (IInteractable, IAnimated)
 
+#### Data Library System
+- **PlantLibrary**: Central library for plant type definitions
+  - Singleton service loading from `PlantLibrary.json`
+  - Stores `PlantData` instances keyed by plant ID
+  - Properties: `Id`, `Name`, `Description`, `PlantSize`, `GrowthStageSprites[]`, `GrowthStageCycles[]`
+  - `GrowthStageCycles`: Integer array (1 cycle = 5 seconds)
+  - Thread-safe initialization with `SemaphoreSlim`
+  - File: `Outgrowth/Models/PlantLibrary.cs`
+- **SeedLibrary**: Central library for seed definitions
+  - Singleton service loading from `SeedLibrary.json`
+  - Stores `SeedData` instances keyed by seed ID
+  - Properties: `Id`, `Name`, `Description`, `Sprite`, `PlantId` (links seed to plant type)
+  - File: `Outgrowth/Models/SeedLibrary.cs`
+- **LiquidLibrary**: Central library for liquid definitions
+  - Singleton service loading from `LiquidLibrary.json`
+  - Stores `LiquidData` instances keyed by liquid ID
+  - Properties: `Id`, `Name`, `Description`, `Sprite`
+  - File: `Outgrowth/Models/LiquidLibrary.cs`
+- **ResourceLibrary**: Central library for resource definitions
+  - Singleton service loading from `ResourceLibrary.json`
+  - Stores `ResourceData` instances keyed by resource ID
+  - Properties: `Id`, `Name`, `Description`, `Sprite`
+  - File: `Outgrowth/Models/ResourceLibrary.cs`
+- **Initialization**: All libraries initialized in parallel via `Task.WhenAll()` on app startup
+
+#### Plant Cultivation System
+- **Plant Growth**: Automatic growth based on cycle system (1 cycle = 5 seconds)
+  - Plants advance through growth stages automatically
+  - Growth persists across app sessions (saved/loaded from JSON)
+  - Cycles calculated from `PersistentTimer` elapsed time
+- **Planting**: Seed planting mechanics
+  - Select seed from SeedsPanel
+  - Click empty pot to plant seed
+  - Plant created from seed's `PlantId` property
+  - Cannot plant in occupied pots
+  - Seed selection remains active after planting (allows multiple plantings)
+- **Harvesting**: Plant removal mechanics
+  - Activate HarvesterButton (✂️) from ToolsPanel
+  - Click plant to harvest (removes plant from pot)
+  - Harvester selection clears when other tools are selected
+- **Plant Sprites**: Support for PNG image sprites and emoji sprites
+  - PNG sprites: `Image` element with `Aspect.Fill` (fills 320×320 container)
+  - Emoji sprites: `Label` element
+  - Sprite paths defined in `PlantLibrary.json` (`growthStageSprites` array)
+
 ### 5.2 Planned Features (Not Yet Implemented)
 
-#### Cultivation System
-- Plant growth mechanics
+#### Cultivation System (Partial)
 - Watering and maintenance
-- Harvesting and resource collection
+- Resource collection from harvesting
 - Environmental control effects
 
 #### Breeding System
@@ -750,6 +910,70 @@ Centralized singleton service for screen size and scale calculations:
   - `UpdateScreenProperties(pageWidth, pageHeight)`: Recalculates all properties based on current page size
   - `Reset()`: Resets singleton instance (useful for testing)
 - **Usage**: `ScreenProperties.Instance.UpdateScreenProperties(width, height)` in page `OnPageSizeChanged` handler
+
+### 8.3 PersistentTimer
+
+**Location**: `Outgrowth/Services/PersistentTimer.cs`
+
+Timer that persists across app sessions:
+- **Singleton Pattern**: `PersistentTimer.Instance`
+- **Functionality**:
+  - Tracks elapsed time even when app is closed
+  - Saves/loads timestamp from local app data directory
+  - Used for calculating plant growth cycles
+- **File**: `gametimer.json` in `FileSystem.AppDataDirectory/Data/`
+- **Methods**:
+  - `Start()`: Starts/resumes timer
+  - `Stop()`: Stops timer and saves state
+  - `ElapsedSeconds`: Property returning total elapsed seconds
+  - `SavePersistedTime()`: Saves current timestamp to JSON file
+  - `LoadPersistedTime()`: Loads saved timestamp and calculates elapsed time
+- **Usage**: Called from `App.OnStart()`, `App.OnSleep()`, `App.OnResume()`
+
+### 8.4 PlantsManager
+
+**Location**: `Outgrowth/Services/PlantsManager.cs`
+
+Manages all plant instances and growth updates:
+- **Singleton Pattern**: `PlantsManager.Instance`
+- **Functionality**:
+  - Maintains list of registered `PlantObject` instances
+  - Triggers `GrowthUpdate` event every 5 seconds (1 cycle)
+  - Tracks current cycle number (`CurrentCycle`)
+- **Properties**:
+  - `CurrentCycle`: Current cycle number (int)
+- **Methods**:
+  - `RegisterPlant(PlantObject plant)`: Adds plant and subscribes to growth updates
+  - `UnregisterPlant(PlantObject plant)`: Removes plant and unsubscribes
+  - `UpdateAllPlants()`: Invokes `GrowthUpdate` event (called by timer)
+  - `SetCurrentCycle(int cycle)`: Sets current cycle (for save/load)
+- **Events**:
+  - `GrowthUpdate`: Fired every cycle, all registered plants subscribe to this
+- **Usage**: Plants automatically subscribe on creation, unregister on harvest
+
+### 8.5 PlantsSaveService
+
+**Location**: `Outgrowth/Services/PlantsSaveService.cs`
+
+Saves and loads plant states:
+- **Functionality**:
+  - Saves plant data with pot number mapping (`Dictionary<int, PlantObject>`)
+  - Tracks `LastSavedCycle` and `CurrentCycle` for time-based calculations
+  - Calculates cycles passed since last save using `PersistentTimer`
+  - Restores `PlantsManager.CurrentCycle` on load
+- **File**: `plants_save.json` in `FileSystem.AppDataDirectory/Data/`
+- **Data Structure**:
+  - `PlantSaveData`: `PlantId`, `PotNumber`, `PlantedAtCycle`, `CyclesLived`
+  - `PlantsSaveFile`: Array of `PlantSaveData`, `LastSavedCycle`, `CurrentCycle`
+- **Methods**:
+  - `SavePlantsWithPotMapping(Dictionary<int, PlantObject> potNumberToPlant)`: Saves all plants
+  - `LoadPlants()`: Loads plants and calculates cycles passed
+  - `UpdatePotMapping(Dictionary<int, PlantObject> potNumberToPlant)`: Updates last known state
+  - `SaveGameState()`: Saves using last known mapping (for app lifecycle events)
+- **Auto-Save Triggers**:
+  - Plant stage changes (`PlantObject.StageChanged` event)
+  - Page navigation (`GreenhousePage.OnPageDisappearing()`)
+  - App lifecycle events (`App.OnSleep()`, `Window.Destroying`)
 
 ---
 
@@ -1150,32 +1374,14 @@ All panels use consistent interaction pattern:
 3. **Comments**: Document coordinate system and formulas
 4. **Consistency**: Use same pattern across all pages
 
-### Testing Checklist
-
-- [ ] Elements position correctly on Windows
-- [ ] Elements position correctly on Android
-- [ ] Coordinates are converted correctly
-- [ ] Elements center properly when selected
-- [ ] Scale transforms work correctly
-- [ ] Font scaling works correctly
-
-## Future Enhancements
-
-- **Y Coordinate Range**: Consider expanding Y range for more vertical positioning options
-- **Animation**: Add smooth transitions when elements move
-- **Zoom**: Implement pinch-to-zoom for GreenhousePage
-- **Custom Elements**: Allow dynamic element creation at runtime
-- **Coordinate Validation**: Add bounds checking for coordinates
-
 ## References
 
-- `.cursorrules`: Quick reference for AI assistants
 - `README.md`: Project overview and getting started guide
 - MAUI Documentation: https://learn.microsoft.com/dotnet/maui/
 
 ---
 
-**Last Updated**: December 26, 2025
+**Last Updated**: December 29, 2025
 
 **Recent Updates**:
 - Added `NavigationService` for animated page navigation with fade transitions
@@ -1185,6 +1391,18 @@ All panels use consistent interaction pattern:
 - Updated LaboratoryPage element coordinates: ResourceSlot (0, 108), Extract (0, -108)
 - Added centering formula documentation: `translationOffset = screenCenter - itemCenterX`
 - Navigation starts at Pot2 (index 1), restricted to Pot2-Pot4 (indices 1-3)
+- **December 29, 2025**: Implemented plant cultivation system
+  - Added `PersistentTimer` for time tracking across app sessions
+  - Added `PlantsManager` for cycle-based growth updates (1 cycle = 5 seconds)
+  - Added `PlantsSaveService` for saving/loading plant states
+  - Implemented `PlantObject` with automatic growth stage progression
+  - Added `PlantLibrary`, `SeedLibrary`, `LiquidLibrary`, `ResourceLibrary` data systems
+  - Implemented seed planting: Select seed → click empty pot to plant
+  - Implemented plant harvesting: Activate harvester → click plant to remove
+  - Dynamic panel population from data libraries (LiquidsPanel, SeedsPanel)
+  - Item selection system with visual highlighting (Android: selected item panel above main panel)
+  - Platform-specific panel widths (Android: 250px, Windows: 300px)
+  - Seed selection persists after planting (allows multiple plantings)
 
 
 

@@ -1,4 +1,6 @@
 ﻿using Outgrowth.ViewModels;
+using Outgrowth.Views;
+using Outgrowth.Services;
 
 namespace Outgrowth;
 
@@ -35,6 +37,27 @@ public partial class MainPage : ContentPage
 
     private void OnExitClicked(object sender, EventArgs e)
     {
+        // Save game state before quitting
+        System.Diagnostics.Debug.WriteLine("[MainPage] OnExitClicked - saving game state before quit");
+        
+        try
+        {
+            // Try to save from GreenhousePage if loaded (most up-to-date state)
+            GreenhousePage.SavePlantsIfLoaded();
+            
+            // Also try to save from last known mapping (fallback if page not loaded)
+            PlantsSaveService.SaveGameState();
+            
+            // Save timer state (this will flush to disk)
+            PersistentTimer.Instance.Stop();
+            
+            System.Diagnostics.Debug.WriteLine("[MainPage] Game state saved before quit");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainPage] Error saving game state: {ex.Message}");
+        }
+        
         Application.Current?.Quit();
     }
 }

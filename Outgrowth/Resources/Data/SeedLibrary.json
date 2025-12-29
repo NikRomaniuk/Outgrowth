@@ -1,0 +1,13 @@
+{
+  "seeds": [
+    {
+      "id": "grass_seed",
+      "name": "Grass",
+      "description": "Basic seed for growing simple grass plants",
+      "sprite": "🌱",
+      "plantId": "grass"
+    }
+
+  ]
+}
+

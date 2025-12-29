@@ -14,7 +14,9 @@
 - **🔬 Laboratory**: Research, breeding, and chemical extraction
 
 ### Coming Soon
-- Plant cultivation mechanics, breeding system, trading, quests, expeditions
+- Breeding system with trait inheritance
+- Trading and expeditions
+- Quest system
 
 ## 🛠️ Tech Stack
 
@@ -41,12 +43,24 @@ Outgrowth/
 ├── Models/               # Data models and environment objects
 │   ├── EnvObject.cs      # Base class for all environment objects
 │   ├── PotObject.cs      # Interactive pot implementation
+│   ├── PlantObject.cs    # Plant instance with growth mechanics
+│   ├── PlantData.cs      # Plant type definitions
+│   ├── PlantLibrary.cs   # Central plant library
+│   ├── SeedData.cs       # Seed definitions
+│   ├── SeedLibrary.cs    # Central seed library
+│   ├── LiquidData.cs     # Liquid definitions
+│   ├── LiquidLibrary.cs  # Central liquid library
+│   ├── ResourceData.cs   # Resource definitions
+│   ├── ResourceLibrary.cs # Central resource library
 │   ├── StationObject.cs  # Interactive station elements
 │   ├── FurnitureObject.cs # Decorative furniture
 │   └── AnimatedPotObject.cs # Animated pot with pulse effect
 ├── Services/             # Application services
 │   ├── NavigationService.cs    # Animated page navigation with fade transitions
-│   └── ScreenProperties.cs     # Screen size and scale calculations
+│   ├── ScreenProperties.cs     # Screen size and scale calculations
+│   ├── PersistentTimer.cs       # Timer that persists across app sessions
+│   ├── PlantsManager.cs         # Manages plant growth and cycles
+│   └── PlantsSaveService.cs     # Saves and loads plant states
 ├── Platforms/            # Platform-specific code
 └── Resources/            # Images, fonts, styles, and other assets
 ```
@@ -85,30 +99,36 @@ dotnet build -f net9.0-android
 ### Currently Implemented
 - ✅ Cross-platform foundation (Windows & Android)
 - ✅ MVVM architecture with data binding
-- ✅ Smooth page navigation with fade transitions (`NavigationService`)
+- ✅ Smooth page navigation with fade transitions
 - ✅ Complete navigation system (Main Menu → Hub → Greenhouse/Laboratory)
 - ✅ **Hub Page**: Interactive command center with Market, Quest Console, Statistics
-- ✅ **Greenhouse Page**: Dynamic pot system (5 pots, navigation on Android), resource panels
+- ✅ **Greenhouse Page**: Plant cultivation with 5 pots, seed planting, and harvesting
 - ✅ **Laboratory Page**: Research interface with resource management
+- ✅ **Plant Cultivation System**:
+  - Automatic growth based on cycles (1 cycle = 5 seconds)
+  - Seed planting: Select seed → click empty pot to plant
+  - Plant harvesting: Activate harvester → click plant to remove
+  - Growth persists across app sessions
+  - Multiple growth stages with sprite animations
+- ✅ **Data Libraries**: Centralized management for plants, seeds, liquids, and resources
 - ✅ **Environment Object System**: Extensible architecture with `EnvObject` base class
-  - `PotObject` - Interactive pots with click handlers
-  - `StationObject` - Interactive station elements (market, consoles, etc.)
+  - `PotObject` - Interactive pots with plant slots
+  - `PlantObject` - Growing plants with automatic stage progression
+  - `StationObject` - Interactive station elements
   - `FurnitureObject` - Decorative furniture items
-  - `AnimatedPotObject` - Pots with pulse animation
   - Interfaces: `IInteractable`, `IAnimated` for extensibility
-- ✅ Responsive design with automatic scaling (16:9 aspect ratio, `ScreenProperties`)
+- ✅ Responsive design with automatic scaling (16:9 aspect ratio)
 - ✅ Android immersive fullscreen mode
+- ✅ Save/Load system for plant states
 
 ### Coming Soon
-- Plant genetics and cultivation mechanics
 - Breeding system with trait inheritance
 - Research progression and chemical extraction
 - Trading, quests, and expeditions
-- Save/Load functionality
 
 ## 🎨 Design
 
-Calm, methodical gameplay with a scientific approach to plant breeding. Solo experience in a space station atmosphere.
+Calm, methodical gameplay with a scientific approach to plant breeding. Solo experience in a space station atmosphere
 
 ## 📝 Academic Project
 
@@ -124,5 +144,5 @@ This is an educational project. All rights reserved
 
 ---
 
-**Status**: 🚧 In Active Development | **Last Updated**: December 26, 2025
+**Status**: 🚧 In Active Development | **Last Updated**: December 29, 2025
 

@@ -92,29 +92,17 @@
             </Border>
         </AbsoluteLayout>
         
-        <!-- Background Overlay (for closing panels on outside click) - Only shown when panel is open -->
-        <Grid x:Name="BackgroundOverlay"
-              Grid.ColumnSpan="3"
-              BackgroundColor="Transparent"
-              Opacity="0"
-              InputTransparent="True"
-              IsVisible="False"
-              ZIndex="500">
-            <Grid.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnBackgroundOverlayTapped"/>
-            </Grid.GestureRecognizers>
-        </Grid>
-        
         <!-- Left Gutter: Liquids Panel (overlapping with Seeds Panel) -->
         <AbsoluteLayout Grid.Column="0"
                        x:Name="LiquidsPanelWrapper"
                        HorizontalOptions="Start"
                        VerticalOptions="Fill"
                        ZIndex="1000">
+            <!-- Main Liquids Panel -->
             <Grid x:Name="LiquidsPanel"
                   AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
                   AbsoluteLayout.LayoutFlags="YProportional"
-                  WidthRequest="300"
+                  WidthRequest="250"
                   HeightRequest="500"
                   Margin="20,0,0,0"
                   IsVisible="False"
@@ -133,7 +121,7 @@
                     </Border.StrokeShape>
                     <Grid RowDefinitions="Auto,*">
                         <Label Grid.Row="0"
-                               Text="💧 Liquids"
+                               Text="Liquids"
                                FontSize="{DynamicResource ResourcePanelTitleSize}"
                                FontAttributes="Bold"
                                TextColor="White"
@@ -143,84 +131,40 @@
                         <ScrollView Grid.Row="1"
                                     VerticalOptions="Fill"
                                     Orientation="Vertical">
-                            <VerticalStackLayout Spacing="10">
-                                <!-- Liquid Item: Water -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#0F1F2F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="💧"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Water"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
-                                
-                                <!-- Liquid Item: Fertilizer -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#1F1F0F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="🧪"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Fertilizer"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
-                                
-                                <!-- Liquid Item: Growth Serum -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#2F0F1F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="⚗️"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Growth Serum"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
+                            <VerticalStackLayout x:Name="LiquidsList"
+                                                 Spacing="10">
+                                <!-- Liquid items will be added here dynamically -->
                             </VerticalStackLayout>
                         </ScrollView>
                     </Grid>
+                </Border>
+            </Grid>
+            
+            <!-- Selected Liquid Info Panel (small, above main panel) - Must be after LiquidsPanel to appear on top -->
+            <Grid x:Name="SelectedLiquidPanel"
+                  AbsoluteLayout.LayoutBounds="0,0.15,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="YProportional"
+                  WidthRequest="250"
+                  HeightRequest="160"
+                  Margin="20,0,0,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#FFD700"
+                        BackgroundColor="#1A1A1A"
+                        Padding="10"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8"/>
+                    </Border.StrokeShape>
+                    <Label x:Name="SelectedLiquidName"
+                           Text=""
+                           FontSize="{DynamicResource ResourcePanelBodySize}"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
                 </Border>
             </Grid>
         </AbsoluteLayout>
@@ -231,10 +175,11 @@
                        HorizontalOptions="Start"
                        VerticalOptions="Fill"
                        ZIndex="1000">
+            <!-- Main Seeds Panel -->
             <Grid x:Name="SeedsPanel"
                   AbsoluteLayout.LayoutBounds="0,0.5,AutoSize,AutoSize"
                   AbsoluteLayout.LayoutFlags="YProportional"
-                  WidthRequest="300"
+                  WidthRequest="250"
                   HeightRequest="500"
                   Margin="20,0,0,0"
                   IsVisible="False"
@@ -253,7 +198,7 @@
                     </Border.StrokeShape>
                     <Grid RowDefinitions="Auto,*">
                         <Label Grid.Row="0"
-                               Text="🌱 Seeds"
+                               Text="Seeds"
                                FontSize="{DynamicResource ResourcePanelTitleSize}"
                                FontAttributes="Bold"
                                TextColor="White"
@@ -263,84 +208,40 @@
                         <ScrollView Grid.Row="1"
                                     VerticalOptions="Fill"
                                     Orientation="Vertical">
-                            <VerticalStackLayout Spacing="10">
-                                <!-- Seed Item: Grass Seed -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#0F1F0F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="🌾"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Grass Seed"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
-                                
-                                <!-- Seed Item: Flower Seed -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#1F0F1F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="🌸"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Flower Seed"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
-                                
-                                <!-- Seed Item: Tree Seed -->
-                                <Border StrokeThickness="1"
-                                        Stroke="#4CAF50"
-                                        BackgroundColor="#0F0F1F"
-                                        Padding="10">
-                                    <Border.StrokeShape>
-                                        <RoundRectangle CornerRadius="8"/>
-                                    </Border.StrokeShape>
-                                    <HorizontalStackLayout Spacing="10">
-                                        <Label Text="🌳"
-                                               FontSize="{DynamicResource ResourcePanelIconSize}"
-                                               VerticalOptions="Center"/>
-                                        <VerticalStackLayout Spacing="3">
-                                            <Label Text="Tree Seed"
-                                                   FontSize="{DynamicResource ResourcePanelBodySize}"
-                                                   FontAttributes="Bold"
-                                                   TextColor="White"/>
-                                            <Label Text="Qty: 0"
-                                                   FontSize="{DynamicResource ResourcePanelQtySize}"
-                                                   TextColor="White"
-                                                   Opacity="0.7"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
-                                </Border>
+                            <VerticalStackLayout x:Name="SeedsList"
+                                                 Spacing="10">
+                                <!-- Seed items will be added here dynamically -->
                             </VerticalStackLayout>
                         </ScrollView>
                     </Grid>
+                </Border>
+            </Grid>
+            
+            <!-- Selected Seed Info Panel (small, above main panel) - Must be after SeedsPanel to appear on top -->
+            <Grid x:Name="SelectedSeedPanel"
+                  AbsoluteLayout.LayoutBounds="0,0.15,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="YProportional"
+                  WidthRequest="250"
+                  HeightRequest="160"
+                  Margin="20,0,0,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#FFD700"
+                        BackgroundColor="#1A1A1A"
+                        Padding="10"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8"/>
+                    </Border.StrokeShape>
+                    <Label x:Name="SelectedSeedName"
+                           Text=""
+                           FontSize="{DynamicResource ResourcePanelBodySize}"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
                 </Border>
             </Grid>
         </AbsoluteLayout>
@@ -372,6 +273,27 @@
                                           Spacing="20"
                                           HorizontalOptions="Center"
                                           VerticalOptions="Center">
+                        <!-- Harvester Button (first, leftmost) -->
+                        <Border x:Name="HarvesterButton"
+                                StrokeThickness="2"
+                                Stroke="#4CAF50"
+                                BackgroundColor="#1F1F0F"
+                                Padding="15"
+                                WidthRequest="100"
+                                HeightRequest="100">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnHarvesterButtonClicked"/>
+                            </Border.GestureRecognizers>
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Label x:Name="HarvesterIcon"
+                                   Text="✂️"
+                                   FontSize="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                        
                         <!-- Liquids Button -->
                         <Border x:Name="LiquidsButton"
                                 StrokeThickness="2"

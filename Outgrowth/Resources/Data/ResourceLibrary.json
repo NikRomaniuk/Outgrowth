@@ -1,0 +1,19 @@
+{
+  "resources": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "description": "Essential liquid for plant growth and hydration.",
+      "sprite": "💧",
+      "baseValue": 1.0
+    },
+    {
+      "id": "lum",
+      "name": "Lum",
+      "description": "Nutrient-rich solution that accelerates plant growth.",
+      "sprite": "🧪",
+      "baseValue": 5.0
+    }
+  ]
+}
+

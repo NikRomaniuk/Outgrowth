@@ -1,0 +1,23 @@
+{
+  "liquids": [
+    {
+      "id": "water",
+      "name": "Water",
+      "description": "Essential liquid for plant growth and hydration!",
+      "sprite": "💧"
+    },
+    {
+      "id": "grass_liquid",
+      "name": "Grass Juice",
+      "description": "Why would you need this?",
+      "sprite": "🧪"
+    },
+    {
+      "id": "lum_liquid",
+      "name": "Lumnium",
+      "description": "Placeholder",
+      "sprite": "💡"
+    }
+  ]
+}
+
