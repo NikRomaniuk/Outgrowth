@@ -133,85 +133,41 @@
                     <ScrollView Grid.Row="1"
                                 VerticalOptions="Fill"
                                 Orientation="Vertical">
-                        <VerticalStackLayout Spacing="10">
-                            <!-- Resource Item: Grass -->
-                            <Border StrokeThickness="1"
-                                    Stroke="#4CAF50"
-                                    BackgroundColor="#0F1F0F"
-                                    Padding="10">
-                                <Border.StrokeShape>
-                                    <RoundRectangle CornerRadius="8"/>
-                                </Border.StrokeShape>
-                                <HorizontalStackLayout Spacing="10">
-                                    <Label Text="🌿"
-                                           FontSize="{DynamicResource ResourcePanelIconSize}"
-                                           VerticalOptions="Center"/>
-                                    <VerticalStackLayout Spacing="3">
-                                        <Label Text="Grass"
-                                               FontSize="{DynamicResource ResourcePanelBodySize}"
-                                               FontAttributes="Bold"
-                                               TextColor="White"/>
-                                        <Label Text="Qty: 0"
-                                               FontSize="{DynamicResource ResourcePanelQtySize}"
-                                               TextColor="White"
-                                               Opacity="0.7"/>
-                                    </VerticalStackLayout>
-                                </HorizontalStackLayout>
-                            </Border>
-                            
-                            <!-- Resource Item: Lum -->
-                            <Border StrokeThickness="1"
-                                    Stroke="#4CAF50"
-                                    BackgroundColor="#1F1F0F"
-                                    Padding="10">
-                                <Border.StrokeShape>
-                                    <RoundRectangle CornerRadius="8"/>
-                                </Border.StrokeShape>
-                                <HorizontalStackLayout Spacing="10">
-                                    <Label Text="💡"
-                                           FontSize="{DynamicResource ResourcePanelIconSize}"
-                                           VerticalOptions="Center"/>
-                                    <VerticalStackLayout Spacing="3">
-                                        <Label Text="Lum"
-                                               FontSize="{DynamicResource ResourcePanelBodySize}"
-                                               FontAttributes="Bold"
-                                               TextColor="White"/>
-                                        <Label Text="Qty: 0"
-                                               FontSize="{DynamicResource ResourcePanelQtySize}"
-                                               TextColor="White"
-                                               Opacity="0.7"/>
-                                    </VerticalStackLayout>
-                                </HorizontalStackLayout>
-                            </Border>
-                            
-                            <!-- Resource Item: Coal -->
-                            <Border StrokeThickness="1"
-                                    Stroke="#4CAF50"
-                                    BackgroundColor="#0F0F0F"
-                                    Padding="10">
-                                <Border.StrokeShape>
-                                    <RoundRectangle CornerRadius="8"/>
-                                </Border.StrokeShape>
-                                <HorizontalStackLayout Spacing="10">
-                                    <Label Text="⚫"
-                                           FontSize="{DynamicResource ResourcePanelIconSize}"
-                                           VerticalOptions="Center"/>
-                                    <VerticalStackLayout Spacing="3">
-                                        <Label Text="Coal"
-                                               FontSize="{DynamicResource ResourcePanelBodySize}"
-                                               FontAttributes="Bold"
-                                               TextColor="White"/>
-                                        <Label Text="Qty: 0"
-                                               FontSize="{DynamicResource ResourcePanelQtySize}"
-                                               TextColor="White"
-                                               Opacity="0.7"/>
-                                    </VerticalStackLayout>
-                                </HorizontalStackLayout>
-                            </Border>
+                        <VerticalStackLayout x:Name="ResourcesList"
+                                             Spacing="10">
+                            <!-- Resource items will be added here dynamically -->
                         </VerticalStackLayout>
                     </ScrollView>
                 </Grid>
             </Border>
+            </Grid>
+            
+            <!-- Selected Resource Info Panel (small, above main panel) - Must be after ResourceListContainer to appear on top -->
+            <Grid x:Name="SelectedResourcePanel"
+                  AbsoluteLayout.LayoutBounds="1,0.15,AutoSize,AutoSize"
+                  AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+                  WidthRequest="250"
+                  HeightRequest="160"
+                  Margin="0,0,20,0"
+                  IsVisible="False"
+                  InputTransparent="True">
+                <Border StrokeThickness="2"
+                        Stroke="#FFD700"
+                        BackgroundColor="#1A1A1A"
+                        Padding="10"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8"/>
+                    </Border.StrokeShape>
+                    <Label x:Name="SelectedResourceName"
+                           Text=""
+                           FontSize="{DynamicResource ResourcePanelBodySize}"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+                </Border>
             </Grid>
         </AbsoluteLayout>
         
