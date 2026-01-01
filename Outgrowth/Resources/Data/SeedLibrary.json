@@ -4,7 +4,7 @@
       "id": "grass_seed",
       "name": "Grass",
       "description": "Basic seed for growing simple grass plants",
-      "sprite": "🌱",
+      "sprite": "seeds__grass.png",
       "plantId": "grass"
     }
 

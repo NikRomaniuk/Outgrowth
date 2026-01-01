@@ -2,25 +2,10 @@ namespace Outgrowth.Models;
 
 /// <summary>
 /// Station object for interactive elements (market, quest console, statistics, resource slots, etc.)
-/// Implements IInteractable for tap/click interactions
+/// Implements IInteractable for tap/click interactions. Invisible object that only captures taps/clicks.
 /// </summary>
 public class StationObject : EnvObject, IInteractable
 {
-    /// <summary>
-    /// Display name for the station element
-    /// </summary>
-    public string DisplayName { get; set; }
-    
-    /// <summary>
-    /// Background color for the station element
-    /// </summary>
-    public Color BackgroundColor { get; set; }
-    
-    /// <summary>
-    /// Separator color (line below icon)
-    /// </summary>
-    public Color SeparatorColor { get; set; }
-    
     /// <summary>
     /// Event fired when the station element is clicked
     /// </summary>
@@ -36,13 +21,16 @@ public class StationObject : EnvObject, IInteractable
     /// </summary>
     public bool CanInteract { get; set; } = true;
     
-    public StationObject(string id, string displayName, int x, int y, double width, double height, 
-                        string sprite, Color? backgroundColor = null, Color? separatorColor = null) 
-        : base(id, x, y, width, height, sprite)
+    /// <summary>
+    /// Visual element for positioning and interaction
+    /// </summary>
+    public View? VisualElement { get; set; }
+    
+    public override int ZIndex => 200;
+    
+    public StationObject(string id, int x, int y, double width, double height) 
+        : base(id, x, y, width, height)
     {
-        DisplayName = displayName;
-        BackgroundColor = backgroundColor ?? Color.FromArgb("#4A4A4A");
-        SeparatorColor = separatorColor ?? Color.FromArgb("#4CAF50");
     }
     
     /// <summary>
@@ -57,13 +45,10 @@ public class StationObject : EnvObject, IInteractable
     }
     
     /// <summary>
-    /// Creates the station UI element (border with icon, separator line, and label)
+    /// Creates an invisible hit area for tap/click detection
     /// </summary>
     public override View CreateVisualElement()
     {
-        var stackLayout = new VerticalStackLayout { Spacing = 10 };
-        
-        // Main border with icon
         var border = new Border
         {
             StrokeThickness = 0,
@@ -81,64 +66,25 @@ public class StationObject : EnvObject, IInteractable
         };
         border.GestureRecognizers.Add(tapGesture);
         
-        var grid = new Grid();
+        VisualElement = border;
+        return border;
+    }
+    
+    /// <summary>
+    /// Updates position of the visual element
+    /// </summary>
+    public override void UpdatePosition(double containerCenterX, double containerCenterY)
+    {
+        if (VisualElement == null) return;
         
-        // Background box
-        grid.Children.Add(new BoxView 
-        { 
-            Color = BackgroundColor, 
-            CornerRadius = 10, 
-            Opacity = 0.5 
-        });
+        double centerPixelX = containerCenterX + X;
+        double centerPixelY = containerCenterY - Y; // Negative Y = below center
         
-        // Icon label
-        var iconLabel = new Label
-        {
-            Text = BaseSprite,
-            HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.Center
-        };
-        iconLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonIconSize");
-        grid.Children.Add(iconLabel);
+        double leftEdgeX = centerPixelX - (Width / 2.0);
+        double topEdgeY = centerPixelY - (Height / 2.0);
         
-        // Placeholder label (for development)
-        var placeholderLabel = new Label
-        {
-            Text = $"[{DisplayName}]",
-            HorizontalOptions = LayoutOptions.Center,
-            VerticalOptions = LayoutOptions.End,
-            Margin = new Thickness(0, 0, 0, 10),
-            TextColor = Colors.White,
-            Opacity = 0.7
-        };
-        placeholderLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonPlaceholderSize");
-        grid.Children.Add(placeholderLabel);
-        
-        border.Content = grid;
-        stackLayout.Children.Add(border);
-        
-        // Separator line
-        stackLayout.Children.Add(new BoxView
-        {
-            Color = SeparatorColor,
-            HeightRequest = 3,
-            WidthRequest = Width,
-            HorizontalOptions = LayoutOptions.Center
-        });
-        
-        // Display name label
-        var nameLabel = new Label
-        {
-            Text = DisplayName,
-            FontAttributes = FontAttributes.Bold,
-            HorizontalOptions = LayoutOptions.Center,
-            TextColor = Colors.White
-        };
-        nameLabel.SetDynamicResource(Label.FontSizeProperty, "ButtonLabelSize");
-        stackLayout.Children.Add(nameLabel);
-        
-        VisualElement = stackLayout;
-        return stackLayout;
+        AbsoluteLayout.SetLayoutBounds(VisualElement, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(VisualElement, 0);
     }
 }
 

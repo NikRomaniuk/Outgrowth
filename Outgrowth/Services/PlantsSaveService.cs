@@ -26,10 +26,10 @@ public static class PlantsSaveService
         public int PotNumber { get; set; }
         
         [JsonPropertyName("plantedAtCycle")]
-        public int PlantedAtCycle { get; set; }
+        public long PlantedAtCycle { get; set; }
         
         [JsonPropertyName("cyclesLived")]
-        public int CyclesLived { get; set; }
+        public long CyclesLived { get; set; }
     }
     
     /// <summary>
@@ -41,10 +41,10 @@ public static class PlantsSaveService
         public List<PlantSaveData> Plants { get; set; } = new();
         
         [JsonPropertyName("lastSavedCycle")]
-        public int LastSavedCycle { get; set; }
+        public long LastSavedCycle { get; set; }
         
         [JsonPropertyName("currentCycle")]
-        public int CurrentCycle { get; set; }
+        public long CurrentCycle { get; set; }
     }
     
     /// <summary>
@@ -119,7 +119,7 @@ public static class PlantsSaveService
     /// Calculates total cycles elapsed based on PersistentTimer elapsed time
     /// Returns total cycles since timer started (not cycles passed since save)
     /// </summary>
-    private static int CalculateCyclesPassedSinceSave(int unusedParameter)
+    private static long CalculateCyclesPassedSinceSave(int unusedParameter)
     {
         try
         {
@@ -128,7 +128,7 @@ public static class PlantsSaveService
             
             // Convert seconds to cycles (1 cycle = 5 seconds)
             const double secondsPerCycle = 5.0;
-            int totalCycles = (int)(elapsedSeconds / secondsPerCycle);
+            long totalCycles = (long)(elapsedSeconds / secondsPerCycle);
             
             System.Diagnostics.Debug.WriteLine($"[PlantsSaveService] Elapsed seconds: {elapsedSeconds}, total cycles: {totalCycles}");
             return totalCycles;
@@ -143,14 +143,14 @@ public static class PlantsSaveService
     /// <summary>
     /// Loads plants from file and returns list of plant data with pot numbers
     /// </summary>
-    public static List<(PlantSaveData plantData, int cyclesPassed)> LoadPlants()
+    public static List<(PlantSaveData plantData, long cyclesPassed)> LoadPlants()
     {
         try
         {
             if (!File.Exists(SaveFilePath))
             {
                 System.Diagnostics.Debug.WriteLine("[PlantsSaveService] No save file found");
-                return new List<(PlantSaveData, int)>();
+                return new List<(PlantSaveData, long)>();
             }
             
             var json = File.ReadAllText(SaveFilePath);
@@ -162,20 +162,20 @@ public static class PlantsSaveService
             if (saveData == null || saveData.Plants == null)
             {
                 System.Diagnostics.Debug.WriteLine("[PlantsSaveService] Save file is empty or invalid");
-                return new List<(PlantSaveData, int)>();
+                return new List<(PlantSaveData, long)>();
             }
             
             // Calculate current cycle based on elapsed time from PersistentTimer
             // This accounts for time passed while the app was closed
-            int currentCycleFromTime = CalculateCyclesPassedSinceSave(0); // Total cycles elapsed
-            int lastSavedCycle = saveData.LastSavedCycle;
+            long currentCycleFromTime = CalculateCyclesPassedSinceSave(0); // Total cycles elapsed
+            long lastSavedCycle = saveData.LastSavedCycle;
             
             // Calculate cycles passed since last save
-            int cyclesPassed = currentCycleFromTime - lastSavedCycle;
+            long cyclesPassed = currentCycleFromTime - lastSavedCycle;
             if (cyclesPassed < 0) cyclesPassed = 0; // Safety check
             
             // Restore CurrentCycle to the saved value, then it will continue incrementing from there
-            int savedCurrentCycle = saveData.CurrentCycle;
+            long savedCurrentCycle = saveData.CurrentCycle;
             if (savedCurrentCycle > 0)
             {
                 // Set to saved cycle, but we need to account for time passed
@@ -195,7 +195,7 @@ public static class PlantsSaveService
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[PlantsSaveService] Error loading plants: {ex.Message}");
-            return new List<(PlantSaveData, int)>();
+            return new List<(PlantSaveData, long)>();
         }
     }
     

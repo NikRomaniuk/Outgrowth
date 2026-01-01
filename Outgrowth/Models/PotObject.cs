@@ -8,6 +8,12 @@ public class PotObject : EnvObject, IInteractable
     public event EventHandler<TappedEventArgs>? Clicked;
     public Action? InteractAction { get; set; }
     public bool CanInteract { get; set; } = true;
+    public override int ZIndex => 200;
+    
+    /// <summary>
+    /// Visual element for positioning
+    /// </summary>
+    public View? VisualElement { get; set; }
     
     /// <summary>
     /// Plant object placed in this pot's slot. Null if slot is empty
@@ -15,7 +21,7 @@ public class PotObject : EnvObject, IInteractable
     public PlantObject? PlantSlot { get; set; }
     
     public PotObject(int potNumber, int x, int y, string imageSource) 
-        : base($"Pot{potNumber}", x, y, 320, 320, "")
+        : base($"Pot{potNumber}", x, y, 320, 320)
     {
         PotNumber = potNumber;
         ImageSource = imageSource;
@@ -88,6 +94,23 @@ public class PotObject : EnvObject, IInteractable
         
         VisualElement = mainGrid;
         return mainGrid;
+    }
+    
+    /// <summary>
+    /// Updates position of the visual element
+    /// </summary>
+    public override void UpdatePosition(double containerCenterX, double containerCenterY)
+    {
+        if (VisualElement == null) return;
+        
+        double centerPixelX = containerCenterX + X;
+        double centerPixelY = containerCenterY - Y; // Negative Y = below center
+        
+        double leftEdgeX = centerPixelX - (Width / 2.0);
+        double topEdgeY = centerPixelY - (Height / 2.0);
+        
+        AbsoluteLayout.SetLayoutBounds(VisualElement, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(VisualElement, 0);
     }
 }
 

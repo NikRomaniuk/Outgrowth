@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="Outgrowth.Views.LaboratoryPage">
+             xmlns:viewModels="clr-namespace:Outgrowth.ViewModels"
+             x:Class="Outgrowth.Views.LaboratoryPage"
+             x:DataType="viewModels:LaboratoryViewModel">
     
     <Grid ColumnDefinitions="Auto,*,Auto">
         
@@ -71,19 +73,6 @@
             </AbsoluteLayout>
         </ContentView>
         
-        <!-- Background Overlay (for closing panel on outside click) - Only shown when panel is open -->
-        <Grid x:Name="BackgroundOverlay"
-              Grid.ColumnSpan="3"
-              BackgroundColor="Transparent"
-              Opacity="0"
-              InputTransparent="True"
-              IsVisible="False"
-              ZIndex="500">
-            <Grid.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnBackgroundOverlayTapped"/>
-            </Grid.GestureRecognizers>
-        </Grid>
-        
         <!-- Right Gutter: Resource List ScrollView -->
         <AbsoluteLayout Grid.Column="2"
                        x:Name="ResourceListWrapper"
@@ -115,15 +104,12 @@
                         Padding="15"
                         HorizontalOptions="Fill"
                         VerticalOptions="Fill">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnResourcePanelTapped"/>
-                </Border.GestureRecognizers>
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="10"/>
                 </Border.StrokeShape>
                 <Grid RowDefinitions="Auto,*">
                     <Label Grid.Row="0"
-                           Text="📦 Resources"
+                           Text="Resources"
                            FontSize="{DynamicResource ResourcePanelTitleSize}"
                            FontAttributes="Bold"
                            TextColor="White"
@@ -160,13 +146,13 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="8"/>
                     </Border.StrokeShape>
-                    <Label x:Name="SelectedResourceName"
-                           Text=""
-                           FontSize="{DynamicResource ResourcePanelBodySize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
+                          <Label
+                              Text="{Binding SelectedResourceName}"
+                              FontSize="{DynamicResource ResourcePanelBodySize}"
+                              FontAttributes="Bold"
+                              TextColor="White"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"/>
                 </Border>
             </Grid>
         </AbsoluteLayout>

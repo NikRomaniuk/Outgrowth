@@ -2,6 +2,9 @@ using Outgrowth.ViewModels;
 using Outgrowth.Models;
 using Outgrowth.Services;
 using System.Linq;
+using System.Threading.Tasks;
+using System.Threading;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
 using PlantsSaveData = Outgrowth.Services.PlantsSaveService.PlantSaveData;
 #if WINDOWS
@@ -23,6 +26,16 @@ public partial class GreenhousePage : ContentPage
     private LiquidData? _selectedLiquid;
     private SeedData? _selectedSeed;
     private bool _isHarvesterSelected = false;
+    
+    // Animation lock to prevent opening other panels during animation
+    private bool _isAnimating = false;
+    
+    // Debounce timer for OnPageSizeChanged
+    private System.Threading.Timer? _sizeChangedDebounceTimer;
+    
+    // Cache for panel items to avoid full recreation when only selection changes
+    private Dictionary<string, Border>? _liquidItemCache;
+    private Dictionary<string, Border>? _seedItemCache;
     
 #if WINDOWS
     private WindowsInput? _windowsInput;
@@ -65,21 +78,53 @@ public partial class GreenhousePage : ContentPage
         this.Loaded += OnPageLoaded;
     }
     
-    private async void OnPageLoaded(object? sender, EventArgs e)
+    private void OnPageLoaded(object? sender, EventArgs e)
     {
-        // Ensure libraries are initialized before creating plant objects
-        // InitializeAsync() is idempotent and thread-safe, so safe to call multiple times
-        await PlantLibrary.InitializeAsync();
-        await SeedLibrary.InitializeAsync();
-        await LiquidLibrary.InitializeAsync();
+        // Data libraries are pre-loaded by GameDataManager at app startup
         
         CreatePotElements();
         UpdatePotPositions();
         UpdateContentPosition(); // Center Pot2 on load
         
-        // Create dynamic panels from libraries
+        // Initialize font sizes BEFORE updating panels (resources must be initialized)
+        // This ensures ResourcePanelIconSize, ResourcePanelQtySize, etc. are available when CreateLiquidItem/CreateSeedItem are called
+        var screenProps = ScreenProperties.Instance;
+        if (this.Width > 0 && this.Height > 0)
+        {
+            screenProps.UpdateScreenProperties(this.Width, this.Height);
+            screenProps.UpdateFontSizes(screenProps.AdaptiveScale);
+        }
+        else
+        {
+            // If page size is not yet available, use default scale (1.0 for Windows 1920px)
+            screenProps.UpdateFontSizes(1.0);
+        }
+        
+        // Create dynamic panels from libraries (after font sizes are initialized)
         UpdateLiquidsPanel();
         UpdateSeedsPanel();
+        
+        // Initialize panel scales for animation (set to 0 if not visible, 1 if visible)
+        if (LiquidsPanel != null)
+        {
+            LiquidsPanel.AnchorX = 0.5;
+            LiquidsPanel.AnchorY = 0.5;
+            if (LiquidsPanel.Handler != null)
+            {
+                try { LiquidsPanel.Scale = LiquidsPanel.IsVisible ? 1 : 0; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Failed setting LiquidsPanel.Scale: {ex.Message}"); }
+            }
+        }
+        if (SeedsPanel != null)
+        {
+            SeedsPanel.AnchorX = 0.5;
+            SeedsPanel.AnchorY = 0.5;
+            if (SeedsPanel.Handler != null)
+            {
+                try { SeedsPanel.Scale = SeedsPanel.IsVisible ? 1 : 0; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Failed setting SeedsPanel.Scale: {ex.Message}"); }
+            }
+        }
         
         // Load saved plants or create test plant
         LoadSavedPlants();
@@ -97,7 +142,7 @@ public partial class GreenhousePage : ContentPage
         _windowsInput = new WindowsInput(
             onLeftArrow: OnLeftArrowPressed,
             onRightArrow: OnRightArrowPressed,
-            onEscape: CloseAllPanels
+            onEscape: () => _ = CloseAllPanels() // Fire and forget async method
         );
         _windowsInput.Attach();
 #endif
@@ -193,7 +238,7 @@ public partial class GreenhousePage : ContentPage
         {
             if (_pots[i].PlantSlot != null)
             {
-                potNumberToPlant[_pots[i].PotNumber] = _pots[i].PlantSlot;
+                potNumberToPlant[_pots[i].PotNumber] = _pots[i].PlantSlot!;
             }
         }
         
@@ -219,10 +264,48 @@ public partial class GreenhousePage : ContentPage
     
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
+#if ANDROID || WINDOWS
+        // Unsubscribe from timer events
+        // Timer.Tick -= OnTimerTick;
+        
         // Save plants before leaving the page
         SavePlants();
         
-        CloseAllPanels();
+        // Reset animation flag to allow closing (page is disappearing)
+        _isAnimating = false;
+        
+        // Clear all selections
+        _isHarvesterSelected = false;
+        _selectedLiquid = null;
+        _selectedSeed = null;
+        
+        // Close panels immediately without animation
+        if (LiquidsPanel != null)
+        {
+            LiquidsPanel.Scale = 0;
+            LiquidsPanel.IsVisible = false;
+            LiquidsPanel.InputTransparent = true;
+        }
+        if (SeedsPanel != null)
+        {
+            SeedsPanel.Scale = 0;
+            SeedsPanel.IsVisible = false;
+            SeedsPanel.InputTransparent = true;
+        }
+        if (SelectedLiquidPanel != null)
+        {
+            SelectedLiquidPanel.IsVisible = false;
+            SelectedLiquidPanel.Scale = 0;
+        }
+        if (SelectedSeedPanel != null)
+        {
+            SelectedSeedPanel.IsVisible = false;
+            SelectedSeedPanel.Scale = 0;
+        }
+        
+        // Update button highlighting to clear all highlights
+        UpdateToolsPanelButtons();
+        
         CleanupPotElements();
         
         // Unregister instance
@@ -231,9 +314,14 @@ public partial class GreenhousePage : ContentPage
             _currentInstance = null;
         }
         
+        // Dispose debounce timer
+        _sizeChangedDebounceTimer?.Dispose();
+        _sizeChangedDebounceTimer = null;
+        
 #if WINDOWS
         _windowsInput?.Detach();
         _windowsInput = null;
+#endif
 #endif
     }
     
@@ -304,6 +392,18 @@ public partial class GreenhousePage : ContentPage
     private void OnPageSizeChanged(object? sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
+        // Debounce: cancel previous timer and start new one
+        _sizeChangedDebounceTimer?.Dispose();
+        _sizeChangedDebounceTimer = new System.Threading.Timer(_ =>
+        {
+            MainThread.BeginInvokeOnMainThread(() => PerformPageSizeUpdate());
+        }, null, 50, Timeout.Infinite); // 50ms debounce delay
+#endif
+    }
+    
+    private void PerformPageSizeUpdate()
+    {
+#if ANDROID || WINDOWS
         if (EnvironmentWrapper != null && EnvironmentContainer != null && ContentContainer != null && HubButton != null 
             && LiquidsPanel != null && SeedsPanel != null && ToolsPanel != null 
             && LeftGutterPlaceholder != null && LiquidsPanelWrapper != null && SeedsPanelWrapper != null)
@@ -321,7 +421,11 @@ public partial class GreenhousePage : ContentPage
                 
                 EnvironmentWrapper.AnchorX = 0.5;
                 EnvironmentWrapper.AnchorY = 0.5;
-                EnvironmentWrapper.Scale = screenProps.Scale;
+                if (EnvironmentWrapper.Handler != null)
+                {
+                    try { EnvironmentWrapper.Scale = screenProps.Scale; }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Failed setting EnvironmentWrapper.Scale: {ex.Message}"); }
+                }
                 EnvironmentWrapper.WidthRequest = ScreenProperties.ReferenceWidth;
                 EnvironmentWrapper.HeightRequest = ScreenProperties.ReferenceHeight;
                 
@@ -333,20 +437,32 @@ public partial class GreenhousePage : ContentPage
                 
                 HubButton.AnchorX = 1;
                 HubButton.AnchorY = 1;
-                HubButton.Scale = screenProps.Scale;
+                if (HubButton.Handler != null)
+                {
+                    try { HubButton.Scale = screenProps.Scale; }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Failed setting HubButton.Scale: {ex.Message}"); }
+                }
                 
                 LeftGutterPlaceholder.AnchorX = 0;
                 LeftGutterPlaceholder.AnchorY = 0.5;
-                LeftGutterPlaceholder.Scale = screenProps.Scale;
+                if (LeftGutterPlaceholder.Handler != null)
+                {
+                    try { LeftGutterPlaceholder.Scale = screenProps.Scale; }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Failed setting LeftGutterPlaceholder.Scale: {ex.Message}"); }
+                }
                 
-                UpdateFontSizes(screenProps.FontScale);
-                UpdatePanelSizes(screenProps.FontScale);
-                UpdateToolsPanelSize(screenProps.FontScale);
-                UpdateMovePanelSize(screenProps.FontScale);
+                var adaptive = screenProps.AdaptiveScale;
+                screenProps.UpdateFontSizes(adaptive);
+                UpdatePanelSizes(adaptive);
+                UpdateToolsPanelSize(adaptive);
+                UpdateMovePanelSize(adaptive);
                 
-                // Update panels to refresh font sizes for dynamically created items
-                UpdateLiquidsPanel();
-                UpdateSeedsPanel();
+                // Update panels to refresh font sizes ONLY if panels are visible
+                // This avoids expensive UI updates when panels are hidden
+                if (LiquidsPanel.IsVisible)
+                    UpdateLiquidsPanel();
+                if (SeedsPanel.IsVisible)
+                    UpdateSeedsPanel();
                 
                 UpdatePotPositions();
                 UpdateContentPosition();
@@ -355,68 +471,67 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    private void UpdatePanelSizes(double fontScale)
+    private void UpdatePanelSizes(double adaptiveScale)
     {
-        // Panel width - different for Android and Windows
-#if ANDROID
-        const double baseWidth = 250.0;
-#else
-        const double baseWidth = 300.0;
-#endif
+        // Use UserInterfaceCreator to calculate platform-agnostic sizes
         const double baseHeight = 500.0;
         const double baseMargin = 20.0;
-        
-        LiquidsPanel.WidthRequest = baseWidth * fontScale;
-        LiquidsPanel.HeightRequest = baseHeight * fontScale;
-        LiquidsPanel.Margin = new Thickness(baseMargin * fontScale, 0, 0, 0);
-        
-        SeedsPanel.WidthRequest = baseWidth * fontScale;
-        SeedsPanel.HeightRequest = baseHeight * fontScale;
-        SeedsPanel.Margin = new Thickness(baseMargin * fontScale, 0, 0, 0);
-        
-        // Update panel Y position - lower on Android
-#if ANDROID
-        const double panelYPosition = 0.7; // Lower position on Android
-#else
-        const double panelYPosition = 0.5; // Center position on Windows
-#endif
-        
+        const double selectedPanelHeight = 160.0;
+
+    #if ANDROID
+        const double baseWidth = 250.0;
+        const double selectedPanelWidth = 250.0;
+        bool isAndroid = true;
+    #else
+        const double baseWidth = 300.0;
+        const double selectedPanelWidth = 300.0;
+        bool isAndroid = false;
+    #endif
+
+        var sizes = UserInterfaceCreator.GetPanelSizes(adaptiveScale, baseWidth, baseHeight, baseMargin, selectedPanelWidth, selectedPanelHeight, isAndroid);
+
+        if (LiquidsPanel != null)
+        {
+            LiquidsPanel.WidthRequest = sizes.Width;
+            LiquidsPanel.HeightRequest = sizes.Height;
+            LiquidsPanel.Margin = new Thickness(sizes.Margin, 0, 0, 0);
+        }
+
+        if (SeedsPanel != null)
+        {
+            SeedsPanel.WidthRequest = sizes.Width;
+            SeedsPanel.HeightRequest = sizes.Height;
+            SeedsPanel.Margin = new Thickness(sizes.Margin, 0, 0, 0);
+        }
+
         if (LiquidsPanelWrapper != null && LiquidsPanel != null)
         {
-            AbsoluteLayout.SetLayoutBounds(LiquidsPanel, new Rect(0, panelYPosition, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+            AbsoluteLayout.SetLayoutBounds(LiquidsPanel, new Rect(0, sizes.PanelYPosition, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
             AbsoluteLayout.SetLayoutFlags(LiquidsPanel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
         }
-        
+
         if (SeedsPanelWrapper != null && SeedsPanel != null)
         {
-            AbsoluteLayout.SetLayoutBounds(SeedsPanel, new Rect(0, panelYPosition, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+            AbsoluteLayout.SetLayoutBounds(SeedsPanel, new Rect(0, sizes.PanelYPosition, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
             AbsoluteLayout.SetLayoutFlags(SeedsPanel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
         }
-        
-        // Update selected info panels (same width as main panels)
-#if ANDROID
-        const double selectedPanelWidth = 250.0;
-#else
-        const double selectedPanelWidth = 300.0;
-#endif
-        const double selectedPanelHeight = 160.0;
-        
+
         if (SelectedLiquidPanel != null)
         {
-            SelectedLiquidPanel.WidthRequest = selectedPanelWidth * fontScale;
-            SelectedLiquidPanel.HeightRequest = selectedPanelHeight * fontScale;
-            SelectedLiquidPanel.Margin = new Thickness(baseMargin * fontScale, 0, 0, 0);
+            SelectedLiquidPanel.WidthRequest = sizes.SelectedWidth;
+            SelectedLiquidPanel.HeightRequest = sizes.SelectedHeight;
+            SelectedLiquidPanel.Margin = new Thickness(sizes.SelectedMarginLeft, 0, 0, 0);
         }
-        
+
         if (SelectedSeedPanel != null)
         {
-            SelectedSeedPanel.WidthRequest = selectedPanelWidth * fontScale;
-            SelectedSeedPanel.HeightRequest = selectedPanelHeight * fontScale;
-            SelectedSeedPanel.Margin = new Thickness(baseMargin * fontScale, 0, 0, 0);
+            SelectedSeedPanel.WidthRequest = sizes.SelectedWidth;
+            SelectedSeedPanel.HeightRequest = sizes.SelectedHeight;
+            SelectedSeedPanel.Margin = new Thickness(sizes.SelectedMarginLeft, 0, 0, 0);
         }
     }
     
-    private void UpdateToolsPanelSize(double fontScale)
+    private void UpdateToolsPanelSize(double adaptiveScale)
     {
         const double baseWidth = 600.0;
         const double baseHeight = 150.0;
@@ -425,10 +540,10 @@ public partial class GreenhousePage : ContentPage
         
         if (ToolsPanel.Children.Count > 0 && ToolsPanel.Children[0] is Border toolsBorder)
         {
-            var panelHeight = baseHeight * fontScale;
-            var panelPadding = basePanelPadding * fontScale;
+            var panelHeight = baseHeight * adaptiveScale;
+            var panelPadding = basePanelPadding * adaptiveScale;
             
-            toolsBorder.WidthRequest = baseWidth * fontScale;
+            toolsBorder.WidthRequest = baseWidth * adaptiveScale;
             toolsBorder.HeightRequest = panelHeight;
             toolsBorder.Padding = panelPadding;
             
@@ -437,7 +552,7 @@ public partial class GreenhousePage : ContentPage
             
             if (ToolsButtonsLayout != null)
             {
-                ToolsButtonsLayout.Spacing = baseSpacing * fontScale;
+                ToolsButtonsLayout.Spacing = baseSpacing * adaptiveScale;
             }
             
             if (LiquidsButton != null && SeedsButton != null && HarvesterButton != null && CancelButton != null)
@@ -499,14 +614,14 @@ public partial class GreenhousePage : ContentPage
         HarvesterButton.BackgroundColor = Color.FromArgb("#1F1F0F");
         
         // Highlight buttons based on state
-        // Highlight panel buttons if their panels are open
-        if (LiquidsPanel != null && LiquidsPanel.IsVisible)
+        // Highlight panel buttons if their panels are open and visible (Scale > 0.1)
+        if (LiquidsPanel != null && LiquidsPanel.IsVisible && LiquidsPanel.Scale > 0.1)
         {
             LiquidsButton.Stroke = Color.FromArgb("#FFD700");
             LiquidsButton.StrokeThickness = 3;
         }
         
-        if (SeedsPanel != null && SeedsPanel.IsVisible)
+        if (SeedsPanel != null && SeedsPanel.IsVisible && SeedsPanel.Scale > 0.1)
         {
             SeedsButton.Stroke = Color.FromArgb("#FFD700");
             SeedsButton.StrokeThickness = 3;
@@ -521,7 +636,7 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    private void UpdateMovePanelSize(double fontScale)
+    private void UpdateMovePanelSize(double adaptiveScale)
     {
 #if ANDROID
         const double baseWidth = 300.0;
@@ -531,20 +646,20 @@ public partial class GreenhousePage : ContentPage
         
         if (MovePanel.Children.Count > 0 && MovePanel.Children[0] is Border moveBorder)
         {
-            var panelHeight = baseHeight * fontScale;
-            var panelPadding = basePanelPadding * fontScale;
+            var panelHeight = baseHeight * adaptiveScale;
+            var panelPadding = basePanelPadding * adaptiveScale;
             
-            moveBorder.WidthRequest = baseWidth * fontScale;
+            moveBorder.WidthRequest = baseWidth * adaptiveScale;
             moveBorder.HeightRequest = panelHeight;
             moveBorder.Padding = panelPadding;
             
             // Button size = panel height - (2 * padding)
             var buttonSize = panelHeight - (2 * panelPadding);
             
-            if (MoveButtonsLayout != null)
-            {
-                MoveButtonsLayout.Spacing = baseSpacing * fontScale;
-            }
+                if (MoveButtonsLayout != null)
+                {
+                    MoveButtonsLayout.Spacing = baseSpacing * adaptiveScale;
+                }
             
             if (LeftArrowButton != null && RightArrowButton != null)
             {
@@ -569,25 +684,20 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
     
-    private void UpdateFontSizes(double fontScale)
-    {
-        const double baseTitleSize = 40.0;
-        const double baseBodySize = 30.0;
-        const double baseQtySize = 24.0;
-        const double baseIconSize = 40.0;
-        
-        Resources["ResourcePanelTitleSize"] = baseTitleSize * fontScale;
-        Resources["ResourcePanelBodySize"] = baseBodySize * fontScale;
-        Resources["ResourcePanelQtySize"] = baseQtySize * fontScale;
-        Resources["ResourcePanelIconSize"] = baseIconSize * fontScale;
-    }
-    
     /// <summary>
-    /// Updates the LiquidsPanel with all available liquids from LiquidLibrary
+    /// Updates the LiquidsPanel with all available liquids from LiquidLibrary.
+    /// Optimized: Only updates selection highlighting if items already exist, otherwise recreates panel.
     /// </summary>
     private void UpdateLiquidsPanel()
     {
 #if ANDROID || WINDOWS
+        // Optimization: Skip update if panel is not visible (saves CPU cycles)
+        if (LiquidsPanel != null && !LiquidsPanel.IsVisible)
+        {
+            // Panel is hidden, no need to update (will be updated when opened)
+            return;
+        }
+        
         if (LiquidsList == null)
         {
             System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateLiquidsPanel: LiquidsList is null");
@@ -596,33 +706,73 @@ public partial class GreenhousePage : ContentPage
         
         System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateLiquidsPanel: Current selection: {_selectedLiquid?.Name ?? "null"}");
         
-        // Clear existing items
-        LiquidsList.Children.Clear();
-        
         try
         {
-            var liquids = LiquidLibrary.GetAllLiquids();
+            var liquids = LiquidLibrary.GetAllLiquids().ToList();
+            
+            // Check if we can update selection only (if cache exists and item count matches)
+            if (_liquidItemCache != null && _liquidItemCache.Count == liquids.Count)
+            {
+                // Update selection highlighting only (optimized path)
+                foreach (var liquid in liquids)
+                {
+                    if (_liquidItemCache.TryGetValue(liquid.Id, out var border))
+                    {
+                        bool isSelected = _selectedLiquid?.Id == liquid.Id;
+                        border.Stroke = isSelected ? Color.FromArgb("#FFD700") : Color.FromArgb("#4CAF50");
+                        border.StrokeThickness = isSelected ? 2 : 1;
+                    }
+                    else
+                    {
+                        // Item not in cache, need full recreation
+                        _liquidItemCache = null;
+                        break;
+                    }
+                }
+                
+                // If cache update was successful, we're done
+                if (_liquidItemCache != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated LiquidsPanel selection highlighting (optimized), selected: {_selectedLiquid?.Name ?? "null"}");
+                    return;
+                }
+            }
+            
+            // Full recreation path: clear and rebuild
+            LiquidsList.Children.Clear();
+            _liquidItemCache = new Dictionary<string, Border>();
+            
             foreach (var liquid in liquids)
             {
                 var liquidItem = CreateLiquidItem(liquid);
+                _liquidItemCache[liquid.Id] = liquidItem;
                 LiquidsList.Children.Add(liquidItem);
             }
             
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated LiquidsPanel with {liquids.Count()} liquids, selected: {_selectedLiquid?.Name ?? "null"}");
+            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated LiquidsPanel with {liquids.Count} liquids (full recreation), selected: {_selectedLiquid?.Name ?? "null"}");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Error updating LiquidsPanel: {ex.Message}");
+            _liquidItemCache = null; // Clear cache on error
         }
 #endif
     }
     
     /// <summary>
-    /// Updates the SeedsPanel with all available seeds from SeedLibrary
+    /// Updates the SeedsPanel with all available seeds from SeedLibrary.
+    /// Optimized: Only updates selection highlighting if items already exist, otherwise recreates panel.
     /// </summary>
     private void UpdateSeedsPanel()
     {
 #if ANDROID || WINDOWS
+        // Optimization: Skip update if panel is not visible (saves CPU cycles)
+        if (SeedsPanel != null && !SeedsPanel.IsVisible)
+        {
+            // Panel is hidden, no need to update (will be updated when opened)
+            return;
+        }
+        
         if (SeedsList == null)
         {
             System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateSeedsPanel: SeedsList is null");
@@ -631,23 +781,55 @@ public partial class GreenhousePage : ContentPage
         
         System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateSeedsPanel: Current selection: {_selectedSeed?.Name ?? "null"}");
         
-        // Clear existing items
-        SeedsList.Children.Clear();
-        
         try
         {
-            var seeds = SeedLibrary.GetAllSeeds();
+            var seeds = SeedLibrary.GetAllSeeds().ToList();
+            
+            // Check if we can update selection only (if cache exists and item count matches)
+            if (_seedItemCache != null && _seedItemCache.Count == seeds.Count)
+            {
+                // Update selection highlighting only (optimized path)
+                foreach (var seed in seeds)
+                {
+                    if (_seedItemCache.TryGetValue(seed.Id, out var border))
+                    {
+                        bool isSelected = _selectedSeed?.Id == seed.Id;
+                        border.Stroke = isSelected ? Color.FromArgb("#FFD700") : Color.FromArgb("#4CAF50");
+                        border.StrokeThickness = isSelected ? 2 : 1;
+                    }
+                    else
+                    {
+                        // Item not in cache, need full recreation
+                        _seedItemCache = null;
+                        break;
+                    }
+                }
+                
+                // If cache update was successful, we're done
+                if (_seedItemCache != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated SeedsPanel selection highlighting (optimized), selected: {_selectedSeed?.Name ?? "null"}");
+                    return;
+                }
+            }
+            
+            // Full recreation path: clear and rebuild
+            SeedsList.Children.Clear();
+            _seedItemCache = new Dictionary<string, Border>();
+            
             foreach (var seed in seeds)
             {
                 var seedItem = CreateSeedItem(seed);
+                _seedItemCache[seed.Id] = seedItem;
                 SeedsList.Children.Add(seedItem);
             }
             
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated SeedsPanel with {seeds.Count()} seeds, selected: {_selectedSeed?.Name ?? "null"}");
+            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Updated SeedsPanel with {seeds.Count} seeds (full recreation), selected: {_selectedSeed?.Name ?? "null"}");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Error updating SeedsPanel: {ex.Message}");
+            _seedItemCache = null; // Clear cache on error
         }
 #endif
     }
@@ -657,110 +839,27 @@ public partial class GreenhousePage : ContentPage
     /// </summary>
     private Border CreateLiquidItem(LiquidData liquid)
     {
-        // Check if this liquid is selected
-        bool isSelected = _selectedLiquid?.Id == liquid.Id;
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] CreateLiquidItem: {liquid.Name}, isSelected={isSelected}, _selectedLiquid={_selectedLiquid?.Name ?? "null"}");
-        
-        var border = new Border
-        {
-            StrokeThickness = 1,
-            Stroke = Color.FromArgb("#4CAF50"),
-            BackgroundColor = Color.FromArgb("#0F1F2F"),
-            Padding = new Thickness(10)
-        };
-        
-        border.StrokeShape = new RoundRectangle { CornerRadius = 8 };
-        
-        if (isSelected)
-        {
-            border.Stroke = Color.FromArgb("#FFD700");
-            border.StrokeThickness = 2;
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] CreateLiquidItem: {liquid.Name} marked as selected (gold border)");
-        }
-        
+        var isSelected = _selectedLiquid?.Id == liquid.Id;
 #if ANDROID
-        // On Android, use Grid to position icon on left and quantity on right
-        var contentGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitionCollection
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star }
-            }
-        };
-        
-        var iconLabel = new Label
-        {
-            Text = liquid.Sprite,
-            FontSize = (double)Resources["ResourcePanelIconSize"],
-            VerticalOptions = LayoutOptions.Center,
-            HorizontalOptions = LayoutOptions.Start
-        };
-        Grid.SetColumn(iconLabel, 0);
-        contentGrid.Children.Add(iconLabel);
-        
-        var qtyLabel = new Label
-        {
-            Text = "0", // TODO: Get actual quantity from inventory
-            FontSize = (double)Resources["ResourcePanelQtySize"],
-            TextColor = Colors.White,
-            Opacity = 0.7,
-            VerticalOptions = LayoutOptions.Center,
-            HorizontalOptions = LayoutOptions.End
-        };
-        Grid.SetColumn(qtyLabel, 1);
-        contentGrid.Children.Add(qtyLabel);
-        
-        border.Content = contentGrid;
+        bool isAndroid = true;
 #else
-        // On Windows, show icon, name, and quantity
-        var horizontalStack = new HorizontalStackLayout
-        {
-            Spacing = 10
-        };
-        
-        var iconLabel = new Label
-        {
-            Text = liquid.Sprite,
-            FontSize = (double)Resources["ResourcePanelIconSize"],
-            VerticalOptions = LayoutOptions.Center
-        };
-        var verticalStack = new VerticalStackLayout
-        {
-            Spacing = 3
-        };
-        
-        var nameLabel = new Label
-        {
-            Text = liquid.Name,
-            FontSize = (double)Resources["ResourcePanelBodySize"],
-            FontAttributes = FontAttributes.Bold,
-            TextColor = Colors.White
-        };
-        
-        var qtyLabel = new Label
-        {
-            Text = "Qty: 0", // TODO: Get actual quantity from inventory
-            FontSize = (double)Resources["ResourcePanelQtySize"],
-            TextColor = Colors.White,
-            Opacity = 0.7
-        };
-        
-        verticalStack.Children.Add(nameLabel);
-        verticalStack.Children.Add(qtyLabel);
-        
-        horizontalStack.Children.Add(iconLabel);
-        horizontalStack.Children.Add(verticalStack);
-        
-        border.Content = horizontalStack;
+        bool isAndroid = false;
 #endif
-        
-        // Add tap gesture to select this liquid
-        var tapGesture = new TapGestureRecognizer();
-        tapGesture.Tapped += (s, e) => OnLiquidSelected(liquid);
-        border.GestureRecognizers.Add(tapGesture);
-        
-        return border;
+
+        // Prefer application-level resources updated by ScreenProperties; fall back to page resources
+        var appRes = Application.Current?.Resources;
+        double panelItemHeight = appRes != null && appRes.ContainsKey("ResourcePanelIconSize")
+            ? (double)appRes["ResourcePanelIconSize"]
+            : (double)Resources["ResourcePanelIconSize"];
+        double qtySize = appRes != null && appRes.ContainsKey("ResourcePanelQtySize")
+            ? (double)appRes["ResourcePanelQtySize"]
+            : (double)Resources["ResourcePanelQtySize"];
+        double bodySize = appRes != null && appRes.ContainsKey("ResourcePanelBodySize")
+            ? (double)appRes["ResourcePanelBodySize"]
+            : (double)Resources["ResourcePanelBodySize"];
+
+        return UserInterfaceCreator.CreatePanelItem(liquid.Id, liquid.Name, liquid.Sprite, isSelected,
+            panelItemHeight, qtySize, bodySize, isAndroid, () => OnLiquidSelected(liquid), isEnabled: liquid.Quantity > 0, bindingContext: liquid);
     }
     
     /// <summary>
@@ -768,110 +867,30 @@ public partial class GreenhousePage : ContentPage
     /// </summary>
     private Border CreateSeedItem(SeedData seed)
     {
-        // Check if this seed is selected
+        // Delegate creation to the centralized UserInterfaceCreator to keep layout consistent
         bool isSelected = _selectedSeed?.Id == seed.Id;
         System.Diagnostics.Debug.WriteLine($"[GreenhousePage] CreateSeedItem: {seed.Name}, isSelected={isSelected}, _selectedSeed={_selectedSeed?.Name ?? "null"}");
-        
-        var border = new Border
-        {
-            StrokeThickness = 1,
-            Stroke = Color.FromArgb("#4CAF50"),
-            BackgroundColor = Color.FromArgb("#0F1F0F"),
-            Padding = new Thickness(10)
-        };
-        
-        border.StrokeShape = new RoundRectangle { CornerRadius = 8 };
-        
-        if (isSelected)
-        {
-            border.Stroke = Color.FromArgb("#FFD700");
-            border.StrokeThickness = 2;
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] CreateSeedItem: {seed.Name} marked as selected (gold border)");
-        }
-        
+
 #if ANDROID
-        // On Android, use Grid to position icon on left and quantity on right
-        var contentGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitionCollection
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star }
-            }
-        };
-        
-        var iconLabel = new Label
-        {
-            Text = seed.Sprite,
-            FontSize = (double)Resources["ResourcePanelIconSize"],
-            VerticalOptions = LayoutOptions.Center,
-            HorizontalOptions = LayoutOptions.Start
-        };
-        Grid.SetColumn(iconLabel, 0);
-        contentGrid.Children.Add(iconLabel);
-        
-        var qtyLabel = new Label
-        {
-            Text = "0", // TODO: Get actual quantity from inventory
-            FontSize = (double)Resources["ResourcePanelQtySize"],
-            TextColor = Colors.White,
-            Opacity = 0.7,
-            VerticalOptions = LayoutOptions.Center,
-            HorizontalOptions = LayoutOptions.End
-        };
-        Grid.SetColumn(qtyLabel, 1);
-        contentGrid.Children.Add(qtyLabel);
-        
-        border.Content = contentGrid;
+        bool isAndroid = true;
 #else
-        // On Windows, show icon, name, and quantity
-        var horizontalStack = new HorizontalStackLayout
-        {
-            Spacing = 10
-        };
-        
-        var iconLabel = new Label
-        {
-            Text = seed.Sprite,
-            FontSize = (double)Resources["ResourcePanelIconSize"],
-            VerticalOptions = LayoutOptions.Center
-        };
-        var verticalStack = new VerticalStackLayout
-        {
-            Spacing = 3
-        };
-        
-        var nameLabel = new Label
-        {
-            Text = seed.Name,
-            FontSize = (double)Resources["ResourcePanelBodySize"],
-            FontAttributes = FontAttributes.Bold,
-            TextColor = Colors.White
-        };
-        
-        var qtyLabel = new Label
-        {
-            Text = "Qty: 0", // TODO: Get actual quantity from inventory
-            FontSize = (double)Resources["ResourcePanelQtySize"],
-            TextColor = Colors.White,
-            Opacity = 0.7
-        };
-        
-        verticalStack.Children.Add(nameLabel);
-        verticalStack.Children.Add(qtyLabel);
-        
-        horizontalStack.Children.Add(iconLabel);
-        horizontalStack.Children.Add(verticalStack);
-        
-        border.Content = horizontalStack;
+        bool isAndroid = false;
 #endif
-        
-        // Add tap gesture to select this seed
-        var tapGesture = new TapGestureRecognizer();
-        tapGesture.Tapped += (s, e) => OnSeedSelected(seed);
-        border.GestureRecognizers.Add(tapGesture);
-        
-        return border;
+
+        // Prefer application-level resources updated by ScreenProperties; fall back to page resources
+        var appRes = Application.Current?.Resources;
+        double panelItemHeight = appRes != null && appRes.ContainsKey("ResourcePanelIconSize")
+            ? (double)appRes["ResourcePanelIconSize"]
+            : (double)Resources["ResourcePanelIconSize"];
+        double qtySize = appRes != null && appRes.ContainsKey("ResourcePanelQtySize")
+            ? (double)appRes["ResourcePanelQtySize"]
+            : (double)Resources["ResourcePanelQtySize"];
+        double bodySize = appRes != null && appRes.ContainsKey("ResourcePanelBodySize")
+            ? (double)appRes["ResourcePanelBodySize"]
+            : (double)Resources["ResourcePanelBodySize"];
+
+        return UserInterfaceCreator.CreatePanelItem(seed.Id, seed.Name, seed.Sprite, isSelected,
+            panelItemHeight, qtySize, bodySize, isAndroid, () => OnSeedSelected(seed), isEnabled: seed.Quantity > 0, bindingContext: seed);
     }
 
     private async void OnHubClicked(object sender, EventArgs e)
@@ -938,8 +957,31 @@ public partial class GreenhousePage : ContentPage
         {
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Harvesting plant {plant.Id}");
             
-            // Find the pot containing this plant
+            // Find the pot containing this plant (try several fallbacks to handle deserialization/instance mismatches)
             var pot = _pots.FirstOrDefault(p => p.PlantSlot == plant);
+            if (pot == null)
+            {
+                // Fallback: match by plant Id
+                pot = _pots.FirstOrDefault(p => p.PlantSlot != null && p.PlantSlot.Id == plant.Id);
+                if (pot != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Fixup: matched plant by Id for {plant.Id} and assigned pot {pot.PotNumber}");
+                }
+            }
+            if (pot == null)
+            {
+                // Fallback: match by PlantId (type) if unique
+                var candidates = _pots.Where(p => p.PlantSlot != null && p.PlantSlot.PlantId == plant.PlantId).ToList();
+                if (candidates.Count == 1)
+                {
+                    pot = candidates.First();
+                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Fixup: matched plant by PlantId for {plant.PlantId} to pot {pot.PotNumber}");
+                }
+                else if (candidates.Count > 1)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Warning: multiple candidate pots found for PlantId {plant.PlantId}, cannot disambiguate");
+                }
+            }
             if (pot != null)
             {
                 plant.Harvest();
@@ -961,9 +1003,12 @@ public partial class GreenhousePage : ContentPage
         // TODO: Add other plant-specific click logic
     }
 
-    private void OnLiquidsButtonClicked(object sender, EventArgs e)
+    private async void OnLiquidsButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
+        if (_isAnimating)
+            return;
+        
         System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnLiquidsButtonClicked called");
         
         // Clear harvester selection when opening panel
@@ -979,50 +1024,37 @@ public partial class GreenhousePage : ContentPage
             _selectedSeed = null;
             SelectedSeedPanel.IsVisible = false;
             
-            // Close seeds panel
-            SeedsPanel.IsVisible = false;
-            SeedsPanel.InputTransparent = true;
+            // Close seeds panel with animation (if open)
+            await CloseSeedsPanelWithAnimation();
             
-            // Update seeds panel to remove highlighting
-            UpdateSeedsPanel();
+            // Note: CloseSeedsPanelWithAnimation already calls UpdateSeedsPanel(), so no need to call it again
             
             // Toggle liquids panel
             if (wasOpen)
             {
-                // Close liquids panel
-                LiquidsPanel.IsVisible = false;
-                LiquidsPanel.InputTransparent = true;
-                SelectedLiquidPanel.IsVisible = false;
-                _selectedLiquid = null;
-                UpdateLiquidsPanel();
+                // Close liquids panel with animation (will update button highlighting inside)
+                await CloseLiquidsPanelWithAnimation();
             }
             else
             {
-                // Open liquids panel
-                LiquidsPanel.IsVisible = true;
-                LiquidsPanel.InputTransparent = false;
-#if ANDROID
-                UpdateSelectedLiquidPanelVisibility();
-#elif WINDOWS
-                // On Windows, always hide selected panel (not needed)
-                if (SelectedLiquidPanel != null)
-                {
-                    SelectedLiquidPanel.IsVisible = false;
-                }
-#endif
+                // Open liquids panel with animation (will update button highlighting inside)
+                await OpenLiquidsPanelWithAnimation();
             }
             
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Liquids panel toggled, _selectedSeed cleared");
         }
         
-        // Update button highlighting
+        // Final update of button highlighting after all operations
         UpdateToolsPanelButtons();
 #endif
     }
 
-    private void OnSeedsButtonClicked(object sender, EventArgs e)
+    private async void OnSeedsButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
+        if (_isAnimating)
+            return;
+        
         System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnSeedsButtonClicked called");
         
         // Clear harvester selection when opening panel
@@ -1038,48 +1070,32 @@ public partial class GreenhousePage : ContentPage
             _selectedLiquid = null;
             SelectedLiquidPanel.IsVisible = false;
             
-            // Close liquids panel
-            LiquidsPanel.IsVisible = false;
-            LiquidsPanel.InputTransparent = true;
+            // Close liquids panel with animation (if open)
+            await CloseLiquidsPanelWithAnimation();
             
-            // Update liquids panel to remove highlighting
-            UpdateLiquidsPanel();
+            // Note: CloseLiquidsPanelWithAnimation already calls UpdateLiquidsPanel(), so no need to call it again
             
             // Toggle seeds panel
             if (wasOpen)
             {
-                // Close seeds panel
-                SeedsPanel.IsVisible = false;
-                SeedsPanel.InputTransparent = true;
-                SelectedSeedPanel.IsVisible = false;
-                _selectedSeed = null;
-                UpdateSeedsPanel();
+                // Close seeds panel with animation (will update button highlighting inside)
+                await CloseSeedsPanelWithAnimation();
             }
             else
             {
-                // Open seeds panel
-                SeedsPanel.IsVisible = true;
-                SeedsPanel.InputTransparent = false;
-#if ANDROID
-                UpdateSelectedSeedPanelVisibility();
-#elif WINDOWS
-                // On Windows, always hide selected panel (not needed)
-                if (SelectedSeedPanel != null)
-                {
-                    SelectedSeedPanel.IsVisible = false;
-                }
-#endif
+                // Open seeds panel with animation (will update button highlighting inside)
+                await OpenSeedsPanelWithAnimation();
             }
             
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Seeds panel toggled, _selectedLiquid cleared");
         }
         
-        // Update button highlighting
+        // Final update of button highlighting after all operations
         UpdateToolsPanelButtons();
 #endif
     }
 
-    private void OnHarvesterButtonClicked(object sender, EventArgs e)
+    private async void OnHarvesterButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
         System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnHarvesterButtonClicked called");
@@ -1093,8 +1109,8 @@ public partial class GreenhousePage : ContentPage
             _selectedLiquid = null;
             _selectedSeed = null;
             
-            // Close panels
-            CloseAllPanels();
+            // Close panels with animation
+            await CloseAllPanels();
         }
         
         // Update button highlighting
@@ -1104,13 +1120,13 @@ public partial class GreenhousePage : ContentPage
 #endif
     }
 
-    private void OnCancelButtonClicked(object sender, EventArgs e)
+    private async void OnCancelButtonClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
         // Clear harvester selection when closing panels (before closing)
         _isHarvesterSelected = false;
         
-        CloseAllPanels();
+        await CloseAllPanels();
         
         // Update button highlighting
         UpdateToolsPanelButtons();
@@ -1150,6 +1166,7 @@ public partial class GreenhousePage : ContentPage
         foreach (var pot in _pots)
         {
             var visualElement = pot.CreateVisualElement();
+            visualElement.ZIndex = pot.ZIndex;
             ContentContainer.Children.Add(visualElement);
         }
 #endif
@@ -1157,6 +1174,7 @@ public partial class GreenhousePage : ContentPage
     
     /// <summary>
     /// Updates the visual element for a specific pot. Use this after modifying PlantSlot.
+    /// Optimized to update only the plant slot element instead of recreating the entire pot.
     /// </summary>
     private void UpdatePotVisualElement(PotObject pot)
     {
@@ -1164,17 +1182,71 @@ public partial class GreenhousePage : ContentPage
         if (ContentContainer == null || pot.VisualElement == null)
             return;
         
-        // Remove old visual element
+        // Optimized: Update only the plant slot element instead of recreating entire pot
+        if (pot.VisualElement is Grid mainGrid && mainGrid.Children.Count > 0)
+        {
+            // Find the plant slot border (second child, index 1) if plant exists, otherwise it doesn't exist
+            Border? plantSlotBorder = null;
+            
+            // Check if plant slot exists (it's the second child if plant exists)
+            if (mainGrid.Children.Count > 1 && mainGrid.Children[1] is Border border)
+            {
+                plantSlotBorder = border;
+            }
+            
+            // Determine if we need to add or remove plant slot
+            bool shouldHavePlant = pot.PlantSlot != null;
+            bool hasPlantSlot = plantSlotBorder != null;
+            
+            if (shouldHavePlant && !hasPlantSlot)
+            {
+                // Add plant slot
+                var slotBorder = new Border
+                {
+                    BackgroundColor = Colors.Transparent,
+                    StrokeThickness = 0,
+                    HeightRequest = pot.Height,
+                    WidthRequest = pot.Width,
+                    HorizontalOptions = LayoutOptions.Center,
+                    VerticalOptions = LayoutOptions.Start,
+                    Margin = new Thickness(0, -pot.Height / 2, 0, 0)
+                };
+                
+                // Create visual element for the plant
+                pot.PlantSlot!.X = 0;
+                pot.PlantSlot!.Y = 0;
+                var plantView = pot.PlantSlot.CreateVisualElement();
+                slotBorder.Content = plantView;
+                
+                mainGrid.Children.Add(slotBorder);
+            }
+            else if (!shouldHavePlant && hasPlantSlot)
+            {
+                // Remove plant slot
+                mainGrid.Children.Remove(plantSlotBorder!);
+            }
+            else if (shouldHavePlant && hasPlantSlot && pot.PlantSlot != null)
+            {
+                // Plant exists and slot exists - no update needed
+                // Plant sprite updates are handled by PlantObject.UpdatePlantSprite() automatically
+                // when stage changes (via ChangeGrowthStage -> UpdatePlantSprite)
+                // This branch should not be reached during normal operation
+                return;
+            }
+            
+            // No need to update positions - pot position hasn't changed, only plant slot content
+            return;
+        }
+        
+        // Fallback: If structure is unexpected, recreate entire pot (shouldn't happen in normal flow)
         if (ContentContainer.Children.Contains(pot.VisualElement))
         {
             ContentContainer.Children.Remove(pot.VisualElement);
         }
         
-        // Create new visual element with updated plant slot
         var newVisualElement = pot.CreateVisualElement();
+        newVisualElement.ZIndex = pot.ZIndex;
         ContentContainer.Children.Add(newVisualElement);
-        
-        // Update position after recreating
         UpdatePotPositions();
 #endif
     }
@@ -1223,155 +1295,352 @@ public partial class GreenhousePage : ContentPage
     {
     }
     
-    /// <summary>
-    /// Handles selection of a liquid item
-    /// </summary>
+    // ============================================================================
+    // Item Selection Handlers
+    // ============================================================================
+    
     private void OnLiquidSelected(LiquidData liquid)
     {
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] OnLiquidSelected: {liquid.Name}, current _selectedSeed={_selectedSeed?.Name ?? "null"}");
+        // Ignore if already selected
+        if (_selectedLiquid?.Id == liquid.Id)
+            return;
         
-        // Clear other selections (only one thing can be selected at a time)
+        // Clear other selections
         _selectedSeed = null;
         _isHarvesterSelected = false;
         if (SelectedSeedPanel != null)
-        {
             SelectedSeedPanel.IsVisible = false;
-        }
-        UpdateSeedsPanel(); // Update to remove seed highlighting
+        UpdateSeedsPanel();
         
+        // Check if selected panel was already visible
+        bool wasAlreadyVisible = SelectedLiquidPanel != null && SelectedLiquidPanel.IsVisible && SelectedLiquidPanel.Scale > 0.1;
+        
+        // Set new selection
         _selectedLiquid = liquid;
         UpdateSelectedLiquidPanelVisibility();
         
-        if (SelectedLiquidName != null)
+        // Update selected name via ViewModel binding
+        if (BindingContext is GreenhouseViewModel gvm)
+            gvm.SelectedLiquidName = liquid.Name;
+        
+        // Animate selected panel appearance (Android only, only if wasn't already visible)
+#if ANDROID
+        if (SelectedLiquidPanel != null && SelectedLiquidPanel.IsVisible && !wasAlreadyVisible &&
+            LiquidsPanel != null && LiquidsPanel.IsVisible && LiquidsPanel.Scale > 0.1)
         {
-            SelectedLiquidName.Text = liquid.Name;
+            SelectedLiquidPanel.AnchorX = 0.5;
+            SelectedLiquidPanel.AnchorY = 0.5;
+            SelectedLiquidPanel.Scale = 0;
+            _ = SelectedLiquidPanel.ScaleTo(1, 200, Easing.SpringOut);
         }
+#endif
         
-        // Refresh the liquids panel to update selection highlighting
+        // Update UI
         UpdateLiquidsPanel();
-        
-        // Update button highlighting
         UpdateToolsPanelButtons();
-        
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Selected liquid: {liquid.Name} (ID: {liquid.Id}), _selectedSeed cleared");
     }
     
-    /// <summary>
-    /// Handles selection of a seed item
-    /// </summary>
     private void OnSeedSelected(SeedData seed)
     {
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] OnSeedSelected: {seed.Name}, current _selectedLiquid={_selectedLiquid?.Name ?? "null"}");
+        // Ignore if already selected
+        if (_selectedSeed?.Id == seed.Id)
+            return;
         
-        // Clear other selections (only one thing can be selected at a time)
+        // Clear other selections
         _selectedLiquid = null;
         _isHarvesterSelected = false;
         if (SelectedLiquidPanel != null)
-        {
             SelectedLiquidPanel.IsVisible = false;
-        }
-        UpdateLiquidsPanel(); // Update to remove liquid highlighting
+        UpdateLiquidsPanel();
         
+        // Check if selected panel was already visible
+        bool wasAlreadyVisible = SelectedSeedPanel != null && SelectedSeedPanel.IsVisible && SelectedSeedPanel.Scale > 0.1;
+        
+        // Set new selection
         _selectedSeed = seed;
         UpdateSelectedSeedPanelVisibility();
         
-        if (SelectedSeedName != null)
+        // Update selected name via ViewModel binding
+        if (BindingContext is GreenhouseViewModel gvm2)
+            gvm2.SelectedSeedName = seed.Name;
+        
+        // Animate selected panel appearance (Android only, only if wasn't already visible)
+#if ANDROID
+        if (SelectedSeedPanel != null && SelectedSeedPanel.IsVisible && !wasAlreadyVisible &&
+            SeedsPanel != null && SeedsPanel.IsVisible && SeedsPanel.Scale > 0.1)
         {
-            SelectedSeedName.Text = seed.Name;
+            SelectedSeedPanel.AnchorX = 0.5;
+            SelectedSeedPanel.AnchorY = 0.5;
+            SelectedSeedPanel.Scale = 0;
+            _ = SelectedSeedPanel.ScaleTo(1, 200, Easing.SpringOut);
         }
+#endif
         
-        // Refresh the seeds panel to update selection highlighting
+        // Update UI
         UpdateSeedsPanel();
-        
-        // Update button highlighting
         UpdateToolsPanelButtons();
-        
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Selected seed: {seed.Name} (ID: {seed.Id}), _selectedLiquid cleared");
     }
 
-    private void CloseAllPanels()
+    // ============================================================================
+    // Panel Animation Methods
+    // ============================================================================
+    
+    private async Task OpenLiquidsPanelWithAnimation()
     {
 #if ANDROID || WINDOWS
-        System.Diagnostics.Debug.WriteLine("[GreenhousePage] CloseAllPanels called");
+        if (LiquidsPanel == null || _isAnimating)
+            return;
         
-        if (LiquidsPanel != null && SeedsPanel != null && SelectedLiquidPanel != null && SelectedSeedPanel != null)
+        _isAnimating = true;
+        
+        // Prepare main panel for animation
+        LiquidsPanel.AnchorX = 0.5;
+        LiquidsPanel.AnchorY = 0.5;
+        LiquidsPanel.Scale = 0;
+        LiquidsPanel.IsVisible = true;
+        LiquidsPanel.InputTransparent = false;
+        
+        // Update panel to ensure items are populated (especially important on first open)
+        UpdateLiquidsPanel();
+        
+        // Prepare selected panel for animation (Android only)
+        Task? selectedPanelTask = null;
+#if ANDROID
+        UpdateSelectedLiquidPanelVisibility();
+        if (SelectedLiquidPanel != null && SelectedLiquidPanel.IsVisible)
         {
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Before close: _selectedLiquid={_selectedLiquid?.Name ?? "null"}, _selectedSeed={_selectedSeed?.Name ?? "null"}");
-            
-            LiquidsPanel.IsVisible = false;
-            LiquidsPanel.InputTransparent = true;
+            SelectedLiquidPanel.AnchorX = 0.5;
+            SelectedLiquidPanel.AnchorY = 0.5;
+            SelectedLiquidPanel.Scale = 0;
+        }
+#elif WINDOWS
+        if (SelectedLiquidPanel != null)
             SelectedLiquidPanel.IsVisible = false;
-            
-            SeedsPanel.IsVisible = false;
-            SeedsPanel.InputTransparent = true;
-            SelectedSeedPanel.IsVisible = false;
-            
-            // Clear selections when closing panels
-            _selectedLiquid = null;
-            _selectedSeed = null;
-            
-            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] After clear: _selectedLiquid={_selectedLiquid?.Name ?? "null"}, _selectedSeed={_selectedSeed?.Name ?? "null"}");
-            
-            // Refresh panels to remove visual highlighting
-            UpdateLiquidsPanel();
-            UpdateSeedsPanel();
-            
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] Panels refreshed after clearing selections");
-        }
-        else
-        {
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] CloseAllPanels: Some panel references are null");
-        }
+#endif
+        
+        // Update button highlighting (GreenhousePage specific)
+        UpdateToolsPanelButtons();
+        
+        // Animate panels opening in parallel
+        var mainPanelTask = LiquidsPanel.ScaleTo(1, 200, Easing.SpringOut);
+#if ANDROID
+        if (SelectedLiquidPanel != null && SelectedLiquidPanel.IsVisible)
+            selectedPanelTask = SelectedLiquidPanel.ScaleTo(1, 200, Easing.SpringOut);
+#endif
+        
+        await mainPanelTask;
+        if (selectedPanelTask != null)
+            await selectedPanelTask;
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
 #endif
     }
     
-    /// <summary>
-    /// Updates visibility of selected liquid panel based on selection state
-    /// </summary>
+    private async Task OpenSeedsPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (SeedsPanel == null || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Prepare main panel for animation
+        SeedsPanel.AnchorX = 0.5;
+        SeedsPanel.AnchorY = 0.5;
+        SeedsPanel.Scale = 0;
+        SeedsPanel.IsVisible = true;
+        SeedsPanel.InputTransparent = false;
+        
+        // Update panel to ensure items are populated (especially important on first open)
+        UpdateSeedsPanel();
+        
+        // Prepare selected panel for animation (Android only)
+        Task? selectedPanelTask = null;
+#if ANDROID
+        UpdateSelectedSeedPanelVisibility();
+        if (SelectedSeedPanel != null && SelectedSeedPanel.IsVisible)
+        {
+            SelectedSeedPanel.AnchorX = 0.5;
+            SelectedSeedPanel.AnchorY = 0.5;
+            SelectedSeedPanel.Scale = 0;
+        }
+#elif WINDOWS
+        if (SelectedSeedPanel != null)
+            SelectedSeedPanel.IsVisible = false;
+#endif
+        
+        // Update button highlighting (GreenhousePage specific)
+        UpdateToolsPanelButtons();
+        
+        // Animate panels opening in parallel
+        var mainPanelTask = SeedsPanel.ScaleTo(1, 200, Easing.SpringOut);
+#if ANDROID
+        if (SelectedSeedPanel != null && SelectedSeedPanel.IsVisible)
+            selectedPanelTask = SelectedSeedPanel.ScaleTo(1, 200, Easing.SpringOut);
+#endif
+        
+        await mainPanelTask;
+        if (selectedPanelTask != null)
+            await selectedPanelTask;
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseLiquidsPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (LiquidsPanel == null || !LiquidsPanel.IsVisible || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Clear selection and update panel to clear visual highlighting BEFORE animation starts
+        // (while panel is still visible, so UpdateLiquidsPanel will execute)
+        _selectedLiquid = null;
+        UpdateLiquidsPanel();
+        
+        // Update button highlighting immediately (GreenhousePage specific)
+        UpdateToolsPanelButtons();
+        
+        // Prepare selected panel for closing animation (Android only)
+        Task? selectedPanelTask = null;
+#if ANDROID
+        if (SelectedLiquidPanel != null && SelectedLiquidPanel.IsVisible)
+        {
+            SelectedLiquidPanel.AnchorX = 0.5;
+            SelectedLiquidPanel.AnchorY = 0.5;
+            selectedPanelTask = SelectedLiquidPanel.ScaleTo(0, 200, Easing.SpringIn);
+        }
+#endif
+        
+        // Animate main panel closing
+        await LiquidsPanel.ScaleTo(0, 200, Easing.SpringIn);
+        
+        // Wait for selected panel animation to complete
+        if (selectedPanelTask != null)
+            await selectedPanelTask;
+        
+        LiquidsPanel.IsVisible = false;
+        LiquidsPanel.InputTransparent = true;
+        
+#if ANDROID
+        if (SelectedLiquidPanel != null)
+        {
+            SelectedLiquidPanel.IsVisible = false;
+            SelectedLiquidPanel.Scale = 0;
+        }
+#endif
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseSeedsPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (SeedsPanel == null || !SeedsPanel.IsVisible || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Clear selection and update panel to clear visual highlighting BEFORE animation starts
+        // (while panel is still visible, so UpdateSeedsPanel will execute)
+        _selectedSeed = null;
+        UpdateSeedsPanel();
+        
+        // Update button highlighting immediately (GreenhousePage specific)
+        UpdateToolsPanelButtons();
+        
+        // Prepare selected panel for closing animation (Android only)
+        Task? selectedPanelTask = null;
+#if ANDROID
+        if (SelectedSeedPanel != null && SelectedSeedPanel.IsVisible)
+        {
+            SelectedSeedPanel.AnchorX = 0.5;
+            SelectedSeedPanel.AnchorY = 0.5;
+            selectedPanelTask = SelectedSeedPanel.ScaleTo(0, 200, Easing.SpringIn);
+        }
+#endif
+        
+        // Animate main panel closing
+        await SeedsPanel.ScaleTo(0, 200, Easing.SpringIn);
+        
+        // Wait for selected panel animation to complete
+        if (selectedPanelTask != null)
+            await selectedPanelTask;
+        
+        SeedsPanel.IsVisible = false;
+        SeedsPanel.InputTransparent = true;
+        
+#if ANDROID
+        if (SelectedSeedPanel != null)
+        {
+            SelectedSeedPanel.IsVisible = false;
+            SelectedSeedPanel.Scale = 0;
+        }
+#endif
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseAllPanels()
+    {
+#if ANDROID || WINDOWS
+        // Clear selections
+        _selectedLiquid = null;
+        _selectedSeed = null;
+        
+        // Update button highlighting immediately
+        UpdateToolsPanelButtons();
+        
+        // Close panels with animation
+        await CloseLiquidsPanelWithAnimation();
+        await CloseSeedsPanelWithAnimation();
+        
+        // Ensure buttons are unhighlighted
+        UpdateToolsPanelButtons();
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    // ============================================================================
+    // Selected Panel Visibility Updates
+    // ============================================================================
+    
     private void UpdateSelectedLiquidPanelVisibility()
     {
 #if ANDROID
         if (SelectedLiquidPanel == null)
-        {
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateSelectedLiquidPanelVisibility: SelectedLiquidPanel is null");
             return;
-        }
         
-        bool shouldBeVisible = _selectedLiquid != null && LiquidsPanel != null && LiquidsPanel.IsVisible;
-        SelectedLiquidPanel.IsVisible = shouldBeVisible;
-        
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateSelectedLiquidPanelVisibility: shouldBeVisible={shouldBeVisible}, _selectedLiquid={_selectedLiquid?.Name ?? "null"}, LiquidsPanel.IsVisible={LiquidsPanel?.IsVisible ?? false}, SelectedLiquidPanel.IsVisible={SelectedLiquidPanel.IsVisible}, SelectedLiquidPanel.Width={SelectedLiquidPanel.Width}, SelectedLiquidPanel.Height={SelectedLiquidPanel.Height}");
+        SelectedLiquidPanel.IsVisible = _selectedLiquid != null && LiquidsPanel != null && LiquidsPanel.IsVisible;
 #elif WINDOWS
-        // On Windows, always hide the selected panel (not needed, names are shown in main panel)
         if (SelectedLiquidPanel != null)
-        {
             SelectedLiquidPanel.IsVisible = false;
-        }
 #endif
     }
     
-    /// <summary>
-    /// Updates visibility of selected seed panel based on selection state
-    /// </summary>
     private void UpdateSelectedSeedPanelVisibility()
     {
 #if ANDROID
         if (SelectedSeedPanel == null)
-        {
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateSelectedSeedPanelVisibility: SelectedSeedPanel is null");
             return;
-        }
         
-        bool shouldBeVisible = _selectedSeed != null && SeedsPanel != null && SeedsPanel.IsVisible;
-        SelectedSeedPanel.IsVisible = shouldBeVisible;
-        
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateSelectedSeedPanelVisibility: shouldBeVisible={shouldBeVisible}, _selectedSeed={_selectedSeed?.Name ?? "null"}, SeedsPanel.IsVisible={SeedsPanel?.IsVisible ?? false}, SelectedSeedPanel.IsVisible={SelectedSeedPanel.IsVisible}, SelectedSeedPanel.Width={SelectedSeedPanel.Width}, SelectedSeedPanel.Height={SelectedSeedPanel.Height}");
+        SelectedSeedPanel.IsVisible = _selectedSeed != null && SeedsPanel != null && SeedsPanel.IsVisible;
 #elif WINDOWS
-        // On Windows, always hide the selected panel (not needed, names are shown in main panel)
         if (SelectedSeedPanel != null)
-        {
             SelectedSeedPanel.IsVisible = false;
-        }
 #endif
     }
 }

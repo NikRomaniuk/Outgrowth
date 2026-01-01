@@ -1,4 +1,5 @@
 using Outgrowth.Models;
+using Microsoft.Maui.ApplicationModel;
 
 namespace Outgrowth.Services;
 
@@ -12,7 +13,7 @@ public class PlantsManager
     private readonly List<PlantObject> _plants = new();
     private System.Timers.Timer? _updateTimer;
     private const int UpdateIntervalMs = 5000; // Update every 5 seconds (1 cycle)
-    private int _currentCycle = 0;
+    private long _currentCycle = 0;
     
     /// <summary>
     /// Event raised when plants should update their growth
@@ -22,12 +23,12 @@ public class PlantsManager
     /// <summary>
     /// Gets the current cycle number (increments every 5 seconds)
     /// </summary>
-    public int CurrentCycle => _currentCycle;
+    public long CurrentCycle => _currentCycle;
     
     /// <summary>
     /// Sets the current cycle number (used when loading from save)
     /// </summary>
-    public void SetCurrentCycle(int cycle)
+    public void SetCurrentCycle(long cycle)
     {
         _currentCycle = cycle;
         System.Diagnostics.Debug.WriteLine($"[PlantsManager] CurrentCycle set to {_currentCycle}");
@@ -56,11 +57,22 @@ public class PlantsManager
         {
             _currentCycle++;
             System.Diagnostics.Debug.WriteLine($"[PlantsManager] Cycle {_currentCycle} started");
+            
             // Update UI on main thread (System.Timers.Timer runs on background thread)
-            MainThread.BeginInvokeOnMainThread(() =>
+            // Wrap in try-catch to handle case when main thread is unavailable (app closing)
+            try
             {
-                UpdateAllPlants();
-            });
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    UpdateAllPlants();
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                // Main thread is no longer available (app is closing)
+                // Timer will be disposed by App.OnSleep/OnWindowDestroying
+                System.Diagnostics.Debug.WriteLine("[PlantsManager] Main thread unavailable (app closing), ignoring timer event");
+            }
         };
         _updateTimer.AutoReset = true;
     }
@@ -70,7 +82,35 @@ public class PlantsManager
     /// </summary>
     public void StartPeriodicUpdates()
     {
-        if (_updateTimer != null && !_updateTimer.Enabled)
+        // Create timer if it was disposed (e.g., after app sleep/resume)
+        if (_updateTimer == null)
+        {
+            _updateTimer = new System.Timers.Timer(UpdateIntervalMs);
+            _updateTimer.Elapsed += (sender, e) =>
+            {
+                _currentCycle++;
+                System.Diagnostics.Debug.WriteLine($"[PlantsManager] Cycle {_currentCycle} started");
+                
+                // Update UI on main thread (System.Timers.Timer runs on background thread)
+                // Wrap in try-catch to handle case when main thread is unavailable (app closing)
+                try
+                {
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        UpdateAllPlants();
+                    });
+                }
+                catch (InvalidOperationException)
+                {
+                    // Main thread is no longer available (app is closing)
+                    // Timer will be disposed by App.OnSleep/OnWindowDestroying
+                    System.Diagnostics.Debug.WriteLine("[PlantsManager] Main thread unavailable (app closing), ignoring timer event");
+                }
+            };
+            _updateTimer.AutoReset = true;
+        }
+        
+        if (!_updateTimer.Enabled)
         {
             _updateTimer.Start();
             System.Diagnostics.Debug.WriteLine("[PlantsManager] Started periodic growth updates (interval: 5s = 1 cycle)");
@@ -78,7 +118,7 @@ public class PlantsManager
     }
     
     /// <summary>
-    /// Stops periodic growth updates
+    /// Stops periodic growth updates (does not dispose timer, allows restart)
     /// </summary>
     public void StopPeriodicUpdates()
     {
@@ -86,6 +126,20 @@ public class PlantsManager
         {
             _updateTimer.Stop();
             System.Diagnostics.Debug.WriteLine("[PlantsManager] Stopped periodic growth updates");
+        }
+    }
+    
+    /// <summary>
+    /// Disposes the timer (called when app is closing)
+    /// </summary>
+    public void DisposeTimer()
+    {
+        if (_updateTimer != null)
+        {
+            _updateTimer.Stop();
+            _updateTimer.Dispose();
+            _updateTimer = null;
+            System.Diagnostics.Debug.WriteLine("[PlantsManager] Timer disposed");
         }
     }
     

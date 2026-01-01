@@ -1,7 +1,9 @@
 using Outgrowth.ViewModels;
 using Outgrowth.Models;
 using Outgrowth.Services;
+using System;
 using System.Linq;
+using System.Threading.Tasks;
 #if WINDOWS
 using Outgrowth.Platforms.Windows;
 #endif
@@ -13,10 +15,13 @@ public partial class HubPage : ContentPage
     // Station objects - created dynamically on page load
     private readonly List<StationObject> _stationObjects = new()
     {
-        new StationObject("Market", "Market", -480, 0, 300, 300, "📦", Color.FromArgb("#4A4A4A")),
-        new StationObject("QuestConsole", "Quest Console", 0, 162, 300, 300, "📡", Color.FromArgb("#1E3A5F")),
-        new StationObject("Statistics", "Statistics", 480, 0, 300, 300, "📊", Color.FromArgb("#2C2C2C"))
+        new StationObject("Market", -480, 0, 300, 300),
+        new StationObject("QuestConsole", 0, 162, 300, 300),
+        new StationObject("Statistics", 480, 0, 300, 300)
     };
+    
+    // Animation lock to prevent opening other panels during animation
+    private bool _isAnimating = false;
     
 #if WINDOWS
     private WindowsInput? _windowsInput;
@@ -54,6 +59,30 @@ public partial class HubPage : ContentPage
         // Initialize element positions from absolute coordinates
         UpdateStationPositions();
         
+        // Initialize panel scales for animation (set to 0 if not visible, baseScale if visible)
+        var screenProps = ScreenProperties.Instance;
+        screenProps.UpdateScreenProperties(this.Width, this.Height);
+        double baseScale = screenProps.Scale;
+        
+        if (MarketPanelBorder != null)
+        {
+            MarketPanelBorder.AnchorX = 0.5;
+            MarketPanelBorder.AnchorY = 0.5;
+            MarketPanelBorder.Scale = MarketPanel != null && MarketPanel.IsVisible ? baseScale : 0;
+        }
+        if (QuestPanelBorder != null)
+        {
+            QuestPanelBorder.AnchorX = 0.5;
+            QuestPanelBorder.AnchorY = 0.5;
+            QuestPanelBorder.Scale = QuestPanel != null && QuestPanel.IsVisible ? baseScale : 0;
+        }
+        if (StatsPanelBorder != null)
+        {
+            StatsPanelBorder.AnchorX = 0.5;
+            StatsPanelBorder.AnchorY = 0.5;
+            StatsPanelBorder.Scale = StatsPanel != null && StatsPanel.IsVisible ? baseScale : 0;
+        }
+        
 #if WINDOWS
         // Attach Windows keyboard input handler (only Esc for closing panels)
         _windowsInput = new WindowsInput(
@@ -67,7 +96,15 @@ public partial class HubPage : ContentPage
     
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
-        CloseAllPanels();
+        // Unsubscribe from timer events
+        // Timer.Tick -= OnTimerTick;
+        
+        // Reset animation flag to allow closing (page is disappearing)
+        _isAnimating = false;
+        // Close panels immediately without animation
+        CloseMarketPanel();
+        CloseQuestPanel();
+        CloseStatsPanel();
         
         // Clean up dynamically created elements to prevent memory leaks
         CleanupStationObjects();
@@ -159,17 +196,30 @@ public partial class HubPage : ContentPage
                 
                 // Scale overlay panels to match environment scale
                 // This ensures panels appear the same size on both platforms
-                MarketPanelBorder.AnchorX = 0.5;
-                MarketPanelBorder.AnchorY = 0.5;
-                MarketPanelBorder.Scale = screenProps.Scale;
-                
-                QuestPanelBorder.AnchorX = 0.5;
-                QuestPanelBorder.AnchorY = 0.5;
-                QuestPanelBorder.Scale = screenProps.Scale;
-                
-                StatsPanelBorder.AnchorX = 0.5;
-                StatsPanelBorder.AnchorY = 0.5;
-                StatsPanelBorder.Scale = screenProps.Scale;
+                // Only update scale if not animating (to avoid interfering with animation)
+                if (!_isAnimating)
+                {
+                    MarketPanelBorder.AnchorX = 0.5;
+                    MarketPanelBorder.AnchorY = 0.5;
+                    if (MarketPanel != null && !MarketPanel.IsVisible)
+                        MarketPanelBorder.Scale = 0;
+                    else
+                        MarketPanelBorder.Scale = screenProps.Scale;
+                    
+                    QuestPanelBorder.AnchorX = 0.5;
+                    QuestPanelBorder.AnchorY = 0.5;
+                    if (QuestPanel != null && !QuestPanel.IsVisible)
+                        QuestPanelBorder.Scale = 0;
+                    else
+                        QuestPanelBorder.Scale = screenProps.Scale;
+                    
+                    StatsPanelBorder.AnchorX = 0.5;
+                    StatsPanelBorder.AnchorY = 0.5;
+                    if (StatsPanel != null && !StatsPanel.IsVisible)
+                        StatsPanelBorder.Scale = 0;
+                    else
+                        StatsPanelBorder.Scale = screenProps.Scale;
+                }
             }
         }
 #endif
@@ -187,6 +237,7 @@ public partial class HubPage : ContentPage
         foreach (var station in _stationObjects)
         {
             var visualElement = station.CreateVisualElement();
+            visualElement.ZIndex = station.ZIndex;
             EnvironmentContainer.Children.Add(visualElement);
         }
 #endif
@@ -223,58 +274,106 @@ public partial class HubPage : ContentPage
     }
 
     // Panel controls
-    private void OnMarketClicked(object sender, EventArgs e)
+    private async void OnMarketClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        if (MarketPanel != null)
+        if (MarketPanel == null || _isAnimating)
+            return;
+        
+        // If market panel is already open, close it
+        if (MarketPanel.IsVisible)
         {
-            MarketPanel.IsVisible = true;
+            await CloseMarketPanelWithAnimation();
+            return;
         }
+        
+        // Close other panels first (only if they're visible)
+        if (QuestPanel != null && QuestPanel.IsVisible)
+            await CloseQuestPanelWithAnimation();
+        if (StatsPanel != null && StatsPanel.IsVisible)
+            await CloseStatsPanelWithAnimation();
+        
+        // Open market panel
+        await OpenMarketPanelWithAnimation();
 #endif
     }
 
-    private void OnQuestClicked(object sender, EventArgs e)
+    private async void OnQuestClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        if (QuestPanel != null)
+        if (QuestPanel == null || _isAnimating)
+            return;
+        
+        // If quest panel is already open, close it
+        if (QuestPanel.IsVisible)
         {
-            QuestPanel.IsVisible = true;
+            await CloseQuestPanelWithAnimation();
+            return;
         }
+        
+        // Close other panels first (only if they're visible)
+        if (MarketPanel != null && MarketPanel.IsVisible)
+            await CloseMarketPanelWithAnimation();
+        if (StatsPanel != null && StatsPanel.IsVisible)
+            await CloseStatsPanelWithAnimation();
+        
+        // Open quest panel
+        await OpenQuestPanelWithAnimation();
 #endif
     }
 
-    private void OnStatsClicked(object sender, EventArgs e)
+    private async void OnStatsClicked(object sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        if (StatsPanel != null)
+        if (StatsPanel == null || _isAnimating)
+            return;
+        
+        // If stats panel is already open, close it
+        if (StatsPanel.IsVisible)
         {
-            StatsPanel.IsVisible = true;
+            await CloseStatsPanelWithAnimation();
+            return;
         }
+        
+        // Close other panels first (only if they're visible)
+        if (MarketPanel != null && MarketPanel.IsVisible)
+            await CloseMarketPanelWithAnimation();
+        if (QuestPanel != null && QuestPanel.IsVisible)
+            await CloseQuestPanelWithAnimation();
+        
+        // Open stats panel
+        await OpenStatsPanelWithAnimation();
 #endif
     }
 
     // Panel background taps (close panel)
-    private void OnMarketPanelTapped(object sender, EventArgs e)
+    private async void OnMarketPanelTapped(object sender, EventArgs e)
     {
 #if ANDROID
         // Only close panels on tap for Android (Windows uses Esc key)
-        CloseMarketPanel();
+        await CloseMarketPanelWithAnimation();
+#else
+        await Task.CompletedTask;
 #endif
     }
 
-    private void OnQuestPanelTapped(object sender, EventArgs e)
+    private async void OnQuestPanelTapped(object sender, EventArgs e)
     {
 #if ANDROID
         // Only close panels on tap for Android (Windows uses Esc key)
-        CloseQuestPanel();
+        await CloseQuestPanelWithAnimation();
+#else
+        await Task.CompletedTask;
 #endif
     }
 
-    private void OnStatsPanelTapped(object sender, EventArgs e)
+    private async void OnStatsPanelTapped(object sender, EventArgs e)
     {
 #if ANDROID
         // Only close panels on tap for Android (Windows uses Esc key)
-        CloseStatsPanel();
+        await CloseStatsPanelWithAnimation();
+#else
+        await Task.CompletedTask;
 #endif
     }
 
@@ -294,12 +393,162 @@ public partial class HubPage : ContentPage
         // Stop event propagation (prevents panel tap from closing)
     }
 
-    // Close panel methods
+    // Animation methods for panels
+    private async Task OpenMarketPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (MarketPanel == null || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Get base scale from screen properties
+        var screenProps = ScreenProperties.Instance;
+        double baseScale = screenProps.Scale;
+        
+        // Set anchor point to center for scale animation
+        MarketPanelBorder.AnchorX = 0.5;
+        MarketPanelBorder.AnchorY = 0.5;
+        
+        // Set initial scale to 0 and make visible
+        MarketPanelBorder.Scale = 0;
+        MarketPanel.IsVisible = true;
+        
+        // Animate scale from 0 to baseScale (expand animation)
+        await MarketPanelBorder.ScaleTo(baseScale, 200, Easing.SpringOut);
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task OpenQuestPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (QuestPanel == null || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Get base scale from screen properties
+        var screenProps = ScreenProperties.Instance;
+        double baseScale = screenProps.Scale;
+        
+        // Set anchor point to center for scale animation
+        QuestPanelBorder.AnchorX = 0.5;
+        QuestPanelBorder.AnchorY = 0.5;
+        
+        // Set initial scale to 0 and make visible
+        QuestPanelBorder.Scale = 0;
+        QuestPanel.IsVisible = true;
+        
+        // Animate scale from 0 to baseScale (expand animation)
+        await QuestPanelBorder.ScaleTo(baseScale, 200, Easing.SpringOut);
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task OpenStatsPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (StatsPanel == null || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Get base scale from screen properties
+        var screenProps = ScreenProperties.Instance;
+        double baseScale = screenProps.Scale;
+        
+        // Set anchor point to center for scale animation
+        StatsPanelBorder.AnchorX = 0.5;
+        StatsPanelBorder.AnchorY = 0.5;
+        
+        // Set initial scale to 0 and make visible
+        StatsPanelBorder.Scale = 0;
+        StatsPanel.IsVisible = true;
+        
+        // Animate scale from 0 to baseScale (expand animation)
+        await StatsPanelBorder.ScaleTo(baseScale, 200, Easing.SpringOut);
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseMarketPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (MarketPanel == null || !MarketPanel.IsVisible || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Animate scale from current scale to 0 (shrink animation)
+        await MarketPanelBorder.ScaleTo(0, 200, Easing.SpringIn);
+        
+        // Hide after animation
+        MarketPanel.IsVisible = false;
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseQuestPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (QuestPanel == null || !QuestPanel.IsVisible || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Animate scale from current scale to 0 (shrink animation)
+        await QuestPanelBorder.ScaleTo(0, 200, Easing.SpringIn);
+        
+        // Hide after animation
+        QuestPanel.IsVisible = false;
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    private async Task CloseStatsPanelWithAnimation()
+    {
+#if ANDROID || WINDOWS
+        if (StatsPanel == null || !StatsPanel.IsVisible || _isAnimating)
+            return;
+        
+        _isAnimating = true;
+        
+        // Animate scale from current scale to 0 (shrink animation)
+        await StatsPanelBorder.ScaleTo(0, 200, Easing.SpringIn);
+        
+        // Hide after animation
+        StatsPanel.IsVisible = false;
+        
+        _isAnimating = false;
+#else
+        await Task.CompletedTask;
+#endif
+    }
+    
+    // Close panel methods (immediate, no animation)
     private void CloseMarketPanel()
     {
 #if ANDROID || WINDOWS
-        if (MarketPanel != null)
+        if (MarketPanel != null && !_isAnimating)
         {
+            // Cannot close during animation - animation must complete first
+            MarketPanelBorder.Scale = 0;
             MarketPanel.IsVisible = false;
         }
 #endif
@@ -308,8 +557,10 @@ public partial class HubPage : ContentPage
     private void CloseQuestPanel()
     {
 #if ANDROID || WINDOWS
-        if (QuestPanel != null)
+        if (QuestPanel != null && !_isAnimating)
         {
+            // Cannot close during animation - animation must complete first
+            QuestPanelBorder.Scale = 0;
             QuestPanel.IsVisible = false;
         }
 #endif
@@ -318,18 +569,25 @@ public partial class HubPage : ContentPage
     private void CloseStatsPanel()
     {
 #if ANDROID || WINDOWS
-        if (StatsPanel != null)
+        if (StatsPanel != null && !_isAnimating)
         {
+            // Cannot close during animation - animation must complete first
+            StatsPanelBorder.Scale = 0;
             StatsPanel.IsVisible = false;
         }
 #endif
     }
 
-    private void CloseAllPanels()
+    private async void CloseAllPanels()
     {
-        CloseMarketPanel();
-        CloseQuestPanel();
-        CloseStatsPanel();
+        // Close all panels with animation (but only if not already animating)
+        if (!_isAnimating)
+        {
+            await CloseMarketPanelWithAnimation();
+            await CloseStatsPanelWithAnimation();
+            await CloseQuestPanelWithAnimation();
+        }
+        // If animating, do nothing - panels cannot be closed during animation
     }
 }
 

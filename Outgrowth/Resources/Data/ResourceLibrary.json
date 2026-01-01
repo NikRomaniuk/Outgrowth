@@ -4,15 +4,24 @@
       "id": "grass",
       "name": "Grass",
       "description": "Essential liquid for plant growth and hydration.",
-      "sprite": "💧",
-      "baseValue": 1.0
+      "sprite": "resource__grass_leaves.png",
+      "baseValue": 1.0,
+      "extractionResult": {
+        "chloro_juice": 1
+      },
+      "amountForExtraction": 5
     },
     {
       "id": "lum",
       "name": "Lum",
-      "description": "Nutrient-rich solution that accelerates plant growth.",
-      "sprite": "🧪",
-      "baseValue": 5.0
+      "description": "Oaoaoaoaoaoaoa",
+      "sprite": "💡",
+      "baseValue": 5.0,
+      "extractionResult": {
+        "lumnium": 1,
+        "chloro_juice": 1
+      },
+      "amountForExtraction": 1
     }
   ]
 }

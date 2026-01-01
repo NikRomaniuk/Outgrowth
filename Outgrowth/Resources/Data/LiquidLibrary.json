@@ -4,16 +4,16 @@
       "id": "water",
       "name": "Water",
       "description": "Essential liquid for plant growth and hydration!",
-      "sprite": "💧"
+      "sprite": "liquid__water.png"
     },
     {
-      "id": "grass_liquid",
-      "name": "Grass Juice",
+      "id": "chloro_juice",
+      "name": "Chloro-Juice",
       "description": "Why would you need this?",
-      "sprite": "🧪"
+      "sprite": "liquid__chloro_juice.png"
     },
     {
-      "id": "lum_liquid",
+      "id": "lumnium",
       "name": "Lumnium",
       "description": "Placeholder",
       "sprite": "💡"

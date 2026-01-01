@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Cursor rules
 .cursorrules
+
+# Copilot rules
+.copilot-instructions.md

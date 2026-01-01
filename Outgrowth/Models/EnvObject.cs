@@ -14,8 +14,8 @@ public interface IAnimated
 }
 
 /// <summary>
-/// Base class for environment objects. Coordinates use 1:1 pixel ratio.
-/// X and Y represent the center of the object.
+/// Base class for environment objects. Coordinates use 1:1 pixel ratio
+/// X and Y represent the center of the object
 /// </summary>
 public abstract class EnvObject
 {
@@ -33,37 +33,33 @@ public abstract class EnvObject
     
     public double Width { get; set; }
     public double Height { get; set; }
-    public View? VisualElement { get; set; }
-    public string BaseSprite { get; set; }
     
-    protected EnvObject(string id, int x, int y, double width, double height, string baseSprite = "")
+    /// <summary>
+    /// ZIndex for layering objects (default: 100 for furniture, 200 for interactive objects)
+    /// </summary>
+    public virtual int ZIndex { get; } = 100;
+    
+    protected EnvObject(string id, int x, int y, double width, double height)
     {
         Id = id;
         X = x;
         Y = y;
         Width = width;
         Height = height;
-        BaseSprite = baseSprite;
     }
     
     /// <summary>
-    /// Converts center coordinates to top-left corner for AbsoluteLayout.
+    /// Converts center coordinates to top-left corner for AbsoluteLayout
     /// Formula: leftEdgeX = centerPixelX - (Width / 2), topEdgeY = centerPixelY - (Height / 2)
     /// </summary>
     public virtual void UpdatePosition(double containerCenterX, double containerCenterY)
     {
-        if (VisualElement == null) return;
-        
-        double centerPixelX = containerCenterX + X;
-        double centerPixelY = containerCenterY - Y; // Negative Y = below center
-        
-        double leftEdgeX = centerPixelX - (Width / 2.0);
-        double topEdgeY = centerPixelY - (Height / 2.0);
-        
-        AbsoluteLayout.SetLayoutBounds(VisualElement, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-        AbsoluteLayout.SetLayoutFlags(VisualElement, 0);
+        // Override in derived classes that have visual elements
     }
     
+    /// <summary>
+    /// Creates the visual element for this object. Must be implemented by derived classes
+    /// </summary>
     public abstract View CreateVisualElement();
 }
 

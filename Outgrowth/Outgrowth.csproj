@@ -62,6 +62,18 @@
 		<!-- Plant Sprites (pre-scaled, no resizing needed) -->
 		<MauiImage Include="Resources\Images\Sprites\Plants\**\*" Resize="False" />
 		
+		<!-- Lab Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Lab\*" Resize="False" />
+		
+		<!-- Seeds Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Seeds\*" Resize="False" />
+		
+		<!-- Liquids Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Liqiuds\*" Resize="False" />
+		
+		<!-- Resources Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Resources\*" Resize="False" />
+		
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />
 

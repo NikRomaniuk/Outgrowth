@@ -25,20 +25,31 @@ public class PlantObject : EnvObject, IInteractable
     /// <summary>
     /// Cycle number when the plant was planted (uses current cycle, not a new cycle)
     /// </summary>
-    public int PlantedAtCycle { get; set; }
+    public long PlantedAtCycle { get; set; }
     
     /// <summary>
     /// Total number of cycles the plant has lived since planting
     /// </summary>
-    public int CyclesLived { get; set; }
+    public long CyclesLived { get; set; }
     
     public event EventHandler<TappedEventArgs>? Clicked;
     public event EventHandler? StageChanged;
     public Action? InteractAction { get; set; }
     public bool CanInteract { get; set; } = true;
+    public override int ZIndex => 210;
+    
+    /// <summary>
+    /// Visual element for positioning
+    /// </summary>
+    public View? VisualElement { get; set; }
+    
+    /// <summary>
+    /// Base sprite path (for image files) or emoji/text (for labels)
+    /// </summary>
+    public string BaseSprite { get; set; }
     
     public PlantObject(string id, string plantId, int x, int y)
-        : base(id, x, y, 320, 320, "")
+        : base(id, x, y, 320, 320)
     {
         PlantId = plantId;
         CurrentStage = 0;
@@ -57,7 +68,7 @@ public class PlantObject : EnvObject, IInteractable
         Height = size;
         
         // Set initial sprite
-        BaseSprite = PlantDefinition.GetSpriteForStage(0);
+        BaseSprite = PlantDefinition.GetSpriteForStage(0) ?? "";
         
         // Record planting cycle (uses current cycle, not a new cycle)
         PlantedAtCycle = PlantsManager.Instance.CurrentCycle;
@@ -74,7 +85,7 @@ public class PlantObject : EnvObject, IInteractable
     /// ID is generated automatically as "plant_{plantId}_{potNumber}".
     /// </summary>
     public static PlantObject FromSaveData(string plantId, int potNumber, int x, int y, 
-        int plantedAtCycle, int cyclesLived)
+        long plantedAtCycle, long cyclesLived)
     {
         // Generate ID from plantId and potNumber
         string id = $"plant_{plantId}_{potNumber}";
@@ -161,29 +172,29 @@ public class PlantObject : EnvObject, IInteractable
             return;
         }
         
-        int currentCycle = PlantsManager.Instance.CurrentCycle;
+        long currentCycle = PlantsManager.Instance.CurrentCycle;
         CyclesLived = currentCycle - PlantedAtCycle;
-        
+
         System.Diagnostics.Debug.WriteLine($"[PlantObject] Plant {Id}: currentCycle={currentCycle}, PlantedAtCycle={PlantedAtCycle}, CyclesLived={CyclesLived}, CurrentStage={CurrentStage}");
-        
+
         // Calculate which stage the plant should be at based on total cycles lived
         // Sum up cycles needed for each stage transition
-        int accumulatedCycles = 0;
+        long accumulatedCycles = 0;
         int targetStage = 0;
-        
+
         for (int i = 0; i < PlantDefinition.GrowthStageCycles.Length; i++)
         {
             int cyclesNeeded = PlantDefinition.GrowthStageCycles[i];
-            
+
             if (cyclesNeeded <= 0)
             {
                 // Last stage (0 cycles needed means fully grown)
                 targetStage = i;
                 break;
             }
-            
+
             accumulatedCycles += cyclesNeeded;
-            
+
             if (CyclesLived >= accumulatedCycles)
             {
                 // Can reach this stage
@@ -326,13 +337,88 @@ public class PlantObject : EnvObject, IInteractable
     public void Harvest()
     {
         System.Diagnostics.Debug.WriteLine($"[PlantObject] Harvesting plant {Id} (PlantId: {PlantId})");
-        
+
         // Unregister from PlantsManager
         PlantsManager.Instance.UnregisterPlant(this);
-        
-        // TODO: Collect resources from the plant based on its stage and type
-        // For now, just destroy the plant
-        
+
+        try
+        {
+            if (PlantDefinition == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PlantObject] No PlantDefinition for {Id}, no drops generated");
+            }
+            else
+            {
+                // Generate drops for the current stage
+                var drops = PlantDefinition.GenerateDropsForStage(CurrentStage);
+                if (drops.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PlantObject] No drops configured for plant {Id} at stage {CurrentStage}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PlantObject] Applying {drops.Count} drop entries for plant {Id}");
+
+                    foreach (var kv in drops)
+                    {
+                        var materialId = kv.Key;
+                        var qty = kv.Value;
+                        if (qty <= 0) continue;
+
+                        bool applied = false;
+
+                        // Try seeds
+                        if (GameDataManager.Seeds.IsInitialized)
+                        {
+                            var seed = GameDataManager.Seeds.Get(materialId);
+                            if (seed != null)
+                            {
+                                seed.Quantity += qty;
+                                System.Diagnostics.Debug.WriteLine($"[PlantObject] Added {qty} x {materialId} to Seeds (new qty={seed.Quantity})");
+                                applied = true;
+                            }
+                        }
+
+                        // Try liquids
+                        if (!applied && GameDataManager.Liquids.IsInitialized)
+                        {
+                            var liquid = GameDataManager.Liquids.Get(materialId);
+                            if (liquid != null)
+                            {
+                                liquid.Quantity += qty;
+                                System.Diagnostics.Debug.WriteLine($"[PlantObject] Added {qty} x {materialId} to Liquids (new qty={liquid.Quantity})");
+                                applied = true;
+                            }
+                        }
+
+                        // Try resources
+                        if (!applied && GameDataManager.Resources.IsInitialized)
+                        {
+                            var res = GameDataManager.Resources.Get(materialId);
+                            if (res != null)
+                            {
+                                res.Quantity += qty;
+                                System.Diagnostics.Debug.WriteLine($"[PlantObject] Added {qty} x {materialId} to Resources (new qty={res.Quantity})");
+                                applied = true;
+                            }
+                        }
+
+                        if (!applied)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[PlantObject] Warning: drop material '{materialId}' not found in any library");
+                        }
+                    }
+
+                    // Persist materials immediately
+                    GameDataManager.SaveMaterialsState();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PlantObject] Error while applying drops for {Id}: {ex.Message}");
+        }
+
         System.Diagnostics.Debug.WriteLine($"[PlantObject] Plant {Id} harvested and removed");
     }
     
@@ -399,6 +485,23 @@ public class PlantObject : EnvObject, IInteractable
         
         VisualElement = mainGrid;
         return mainGrid;
+    }
+    
+    /// <summary>
+    /// Updates position of the visual element
+    /// </summary>
+    public override void UpdatePosition(double containerCenterX, double containerCenterY)
+    {
+        if (VisualElement == null) return;
+        
+        double centerPixelX = containerCenterX + X;
+        double centerPixelY = containerCenterY - Y; // Negative Y = below center
+        
+        double leftEdgeX = centerPixelX - (Width / 2.0);
+        double topEdgeY = centerPixelY - (Height / 2.0);
+        
+        AbsoluteLayout.SetLayoutBounds(VisualElement, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(VisualElement, 0);
     }
 }
 

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="Outgrowth.Views.GreenhousePage">
+             xmlns:viewModels="clr-namespace:Outgrowth.ViewModels"
+             x:Class="Outgrowth.Views.GreenhousePage"
+             x:DataType="viewModels:GreenhouseViewModel">
     
     <Grid ColumnDefinitions="Auto,*,Auto">
         
@@ -158,13 +160,13 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="8"/>
                     </Border.StrokeShape>
-                    <Label x:Name="SelectedLiquidName"
-                           Text=""
-                           FontSize="{DynamicResource ResourcePanelBodySize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
+                          <Label
+                              Text="{Binding SelectedLiquidName}"
+                              FontSize="{DynamicResource ResourcePanelBodySize}"
+                              FontAttributes="Bold"
+                              TextColor="White"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"/>
                 </Border>
             </Grid>
         </AbsoluteLayout>
@@ -235,13 +237,13 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="8"/>
                     </Border.StrokeShape>
-                    <Label x:Name="SelectedSeedName"
-                           Text=""
-                           FontSize="{DynamicResource ResourcePanelBodySize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
+                          <Label
+                              Text="{Binding SelectedSeedName}"
+                              FontSize="{DynamicResource ResourcePanelBodySize}"
+                              FontAttributes="Bold"
+                              TextColor="White"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"/>
                 </Border>
             </Grid>
         </AbsoluteLayout>

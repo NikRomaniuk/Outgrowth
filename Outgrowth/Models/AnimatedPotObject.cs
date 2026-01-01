@@ -38,10 +38,21 @@ public class AnimatedPotObject : EnvObject, IInteractable, IAnimated
     /// </summary>
     private Border? _animatedBorder;
     
+    /// <summary>
+    /// Visual element for positioning
+    /// </summary>
+    public View? VisualElement { get; set; }
+    
+    /// <summary>
+    /// Base sprite (emoji or text)
+    /// </summary>
+    public string BaseSprite { get; set; }
+    
     public AnimatedPotObject(int potNumber, int x, int y) 
-        : base($"AnimatedPot{potNumber}", x, y, 300, 300, "🌱") // Growing plant icon
+        : base($"AnimatedPot{potNumber}", x, y, 300, 300)
     {
         PotNumber = potNumber;
+        BaseSprite = "🌱"; // Growing plant icon
     }
     
     /// <summary>
@@ -186,6 +197,23 @@ public class AnimatedPotObject : EnvObject, IInteractable, IAnimated
         
         VisualElement = stackLayout;
         return stackLayout;
+    }
+    
+    /// <summary>
+    /// Updates position of the visual element
+    /// </summary>
+    public override void UpdatePosition(double containerCenterX, double containerCenterY)
+    {
+        if (VisualElement == null) return;
+        
+        double centerPixelX = containerCenterX + X;
+        double centerPixelY = containerCenterY - Y; // Negative Y = below center
+        
+        double leftEdgeX = centerPixelX - (Width / 2.0);
+        double topEdgeY = centerPixelY - (Height / 2.0);
+        
+        AbsoluteLayout.SetLayoutBounds(VisualElement, new Rect(leftEdgeX, topEdgeY, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(VisualElement, 0);
     }
 }
 

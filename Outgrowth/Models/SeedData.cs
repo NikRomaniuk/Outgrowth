@@ -1,11 +1,14 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
+using Outgrowth.Services;
 
 namespace Outgrowth.Models;
 
 /// <summary>
 /// Represents a seed resource with ID, description, and properties
 /// </summary>
-public class SeedData
+public class SeedData : IGameData, INotifyPropertyChanged
 {
     /// <summary>
     /// Unique identifier for the seed
@@ -46,6 +49,29 @@ public class SeedData
         Description = description;
         Sprite = sprite;
         PlantId = plantId;
+    }
+
+    /// <summary>
+    /// Quantity owned by the player (for saves/inventory)
+    /// </summary>
+    [JsonPropertyName("quantity")]
+    private int _quantity;
+    public int Quantity
+    {
+        get => _quantity;
+        set
+        {
+            if (_quantity == value) return;
+            _quantity = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
 

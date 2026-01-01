@@ -466,7 +466,7 @@
     <x:Double x:Key="ResourcePanelTitleSize">40</x:Double>
     <x:Double x:Key="ResourcePanelBodySize">30</x:Double>
     <x:Double x:Key="ResourcePanelQtySize">24</x:Double>
-    <x:Double x:Key="ResourcePanelIconSize">40</x:Double>
+    <x:Double x:Key="ResourcePanelIconSize">80</x:Double>
     
     <!-- Base font scale factor (1.0 = Windows base, adjusted dynamically based on screen size) -->
     <x:Double x:Key="FontScaleFactor">1.0</x:Double>

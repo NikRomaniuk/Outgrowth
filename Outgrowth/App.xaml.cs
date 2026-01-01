@@ -20,15 +20,10 @@ namespace Outgrowth
             // Start periodic plant growth updates
             PlantsManager.Instance.StartPeriodicUpdates();
             
-            // Initialize all data libraries from JSON files
+            // Initialize all data libraries from JSON files using GameDataManager (parallel optimized loading)
             try
             {
-                await Task.WhenAll(
-                    SeedLibrary.InitializeAsync(),
-                    PlantLibrary.InitializeAsync(),
-                    LiquidLibrary.InitializeAsync(),
-                    ResourceLibrary.InitializeAsync()
-                );
+                await GameDataManager.InitializeAllAsync();
             }
             catch (Exception ex)
             {
@@ -42,6 +37,9 @@ namespace Outgrowth
         {
             base.OnSleep();
             
+            // Stop plant growth updates before saving (prevents timer from running while app is closing)
+            PlantsManager.Instance.DisposeTimer();
+            
             // Save plants and timer state when app goes to sleep (background or closing)
             System.Diagnostics.Debug.WriteLine("[App] OnSleep called - saving game state");
             SaveGameState();
@@ -53,7 +51,11 @@ namespace Outgrowth
             
             // Restart timer when app resumes (it will load persisted time)
             PersistentTimer.Instance.Start();
-            System.Diagnostics.Debug.WriteLine("[App] OnResume called - timer restarted");
+            
+            // Restart plant growth updates (timer will be recreated in StartPeriodicUpdates if needed)
+            PlantsManager.Instance.StartPeriodicUpdates();
+            
+            System.Diagnostics.Debug.WriteLine("[App] OnResume called - timers restarted");
         }
         
         /// <summary>
@@ -68,6 +70,8 @@ namespace Outgrowth
                 
                 // Also try to save from last known mapping (fallback if page not loaded)
                 PlantsSaveService.SaveGameState();
+                // Save materials state (resources, liquids, seeds)
+                GameDataManager.SaveMaterialsState();
                 
                 // Save timer state
                 PersistentTimer.Instance.Stop();
@@ -102,6 +106,10 @@ namespace Outgrowth
         private void OnWindowDestroying(object? sender, EventArgs e)
         {
             System.Diagnostics.Debug.WriteLine("[App] Window.Destroying called - saving game state");
+            
+            // Stop plant growth updates before saving (prevents timer from running while app is closing)
+            PlantsManager.Instance.DisposeTimer();
+            
             SaveGameState();
         }
     }

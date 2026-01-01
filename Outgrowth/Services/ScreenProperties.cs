@@ -1,3 +1,5 @@
+using Microsoft.Maui.Controls;
+
 namespace Outgrowth.Services;
 
 // Centralized screen size and scale calculations
@@ -22,7 +24,7 @@ public class ScreenProperties
     public double OffsetY { get; private set; }
     
     public const double WindowsBaseWidth = 1920.0;
-    public double FontScale { get; private set; }
+    public double AdaptiveScale { get; private set; }
     
     private ScreenProperties()
     {
@@ -71,8 +73,31 @@ public class ScreenProperties
         OffsetX = (TargetWidth - ScaledWidth) / 2.0;
         OffsetY = (TargetHeight - ScaledHeight) / 2.0;
         
-        // Font scale: Windows 1920px = 1.0
-        FontScale = pageWidth / WindowsBaseWidth;
+        // Adaptive scale: Windows 1920px = 1.0
+        AdaptiveScale = pageWidth / WindowsBaseWidth;
+    }
+
+    /// <summary>
+    /// Update dynamic resource font sizes based on adaptive scale.
+    /// This centralizes font/size calculations so pages don't duplicate the logic.
+    /// It updates the application-level ResourceDictionary entries used by panels.
+    /// </summary>
+    /// <param name="adaptiveScale">Scale factor where 1.0 == Windows 1920px baseline.</param>
+    public void UpdateFontSizes(double adaptiveScale)
+    {
+        const double baseTitleSize = 40.0;
+        const double baseBodySize = 25.0;
+        const double baseQtySize = 25.0;
+        const double baseIconSize = 80.0;
+
+        var resources = Application.Current?.Resources;
+        if (resources == null)
+            return;
+
+        resources["ResourcePanelTitleSize"] = baseTitleSize * adaptiveScale;
+        resources["ResourcePanelBodySize"] = baseBodySize * adaptiveScale;
+        resources["ResourcePanelQtySize"] = baseQtySize * adaptiveScale;
+        resources["ResourcePanelIconSize"] = baseIconSize * adaptiveScale;
     }
     
     public static void Reset()

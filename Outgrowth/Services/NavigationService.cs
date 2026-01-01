@@ -200,6 +200,30 @@ public class NavigationService
         
         return null;
     }
+#elif IOS || MACCATALYST
+    // iOS/macCatalyst: Use built-in navigation transitions (no custom overlays needed)
+    private static Shell? _shell;
+    
+    public static void Initialize(BoxView fadeOverlay, Shell shell)
+    {
+        _shell = shell;
+        // iOS/macCatalyst use platform's native navigation transitions
+    }
+    
+    public static async Task NavigateWithFadeAsync(string route, uint fadeDuration = 200, uint pauseDuration = 50)
+    {
+        if (_shell == null)
+            return;
+        
+        try
+        {
+            await _shell.GoToAsync(route);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Navigation error (iOS/macCatalyst): {ex.Message}");
+        }
+    }
 #endif
 }
 
