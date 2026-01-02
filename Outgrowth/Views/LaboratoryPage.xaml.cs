@@ -28,6 +28,7 @@ public partial class LaboratoryPage : ContentPage
         new FurnitureObject("MachineGlass", 0, (0 + 80), 160, 160, "lab__machine_glass.png", 110),
         new FurnitureObject("MachineLight", 0, (0 - 240), 160, 160, "lab__machine_light_red.png", 110),
         new FurnitureObject("MachineDisplay", 480, (0), 480, 320, "lab__machine_display_off.png", 90),
+        new FurnitureObject("MachineDisplayOverlay", 520, (0), 240, 240, "", 100),
         new FurnitureObject("MachineContent", 0, (0 + 80), 160, 160, "", 105)
     };
     
@@ -48,6 +49,13 @@ public partial class LaboratoryPage : ContentPage
     // Events for display animation lifecycle
     public event EventHandler? DisplayAnimationStarted;
     public event EventHandler? DisplayAnimationEnded;
+    // References to layered display images to avoid Source swaps (preloaded, toggled via Opacity)
+    private Microsoft.Maui.Controls.Image? _displayOffImage;
+    private Microsoft.Maui.Controls.Image? _displayOnImage;
+    // Grid inside MachineDisplayOverlay to show extra content when display is on
+    private Microsoft.Maui.Controls.Grid? _displayContentGrid;
+    private Microsoft.Maui.Controls.Image? _displayContentImage;
+    private Microsoft.Maui.Controls.Label? _displayContentLabel;
     
 #if WINDOWS
     private WindowsInput? _windowsInput;
@@ -96,10 +104,16 @@ public partial class LaboratoryPage : ContentPage
             // Start hidden at center (0) by translating left by 480 (layout X=480 + TranslationX = 0)
             display.VisualElement.TranslationX = -480;
             // Ensure the image shows the "off" sprite
-            if (display.VisualElement is Grid dg && dg.Children.Count > 0 && dg.Children[0] is Image dimg)
-                dimg.Source = "lab__machine_display_off.png";
+            SetupMachineDisplayImages(display);
+        }
+        // Prepare overlay content grid (hidden by default)
+        var overlay = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayOverlay");
+        if (overlay != null && overlay.VisualElement != null)
+        {
+            SetupMachineDisplayOverlay(overlay);
         }
         UpdateMachineContentVisual();
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] OnPageLoaded: selectedResource={_selectedResource?.Name ?? "null"}, displayTranslation={display?.VisualElement?.TranslationX}");
         
         // Subscribe to display animation events to control resource panel items
         DisplayAnimationStarted += OnDisplayAnimationStarted;
@@ -505,26 +519,23 @@ public partial class LaboratoryPage : ContentPage
         if (selectedPanelTask != null)
             await selectedPanelTask;
         
-        // Clean up after animation
+        // Clean up after animation: hide panels but keep current selection and machine state
         ResourceListContainer.IsVisible = false;
         ResourceListContainer.InputTransparent = true;
-        
-#if ANDROID
+
+    #if ANDROID
         if (SelectedResourcePanel != null)
         {
             SelectedResourcePanel.IsVisible = false;
             SelectedResourcePanel.Scale = 0;
         }
-#elif WINDOWS
+    #elif WINDOWS
         if (SelectedResourcePanel != null)
             SelectedResourcePanel.IsVisible = false;
-#endif
-        
-        // Refresh panel to remove visual highlighting
-        UpdateResourcePanel();
-        UpdateMachineContentVisual();
-        if (!_isDisplaySliding)
-            _ = AnimateMachineDisplayForSelection();
+    #endif
+
+        // IMPORTANT: do NOT clear `_selectedResource` nor trigger `AnimateMachineDisplayForSelection()` here.
+        // Leaving selection intact prevents the ResourceSlot sprite from flickering when the panel closes.
         
         _isAnimating = false;
 #else
@@ -545,17 +556,10 @@ public partial class LaboratoryPage : ContentPage
         ResourceListContainer.IsVisible = false;
         ResourceListContainer.InputTransparent = true;
         
-        // Do not clear selection while sliding; closing panel must not remove selection during slide
-        if (!_isDisplaySliding)
-        {
-            _selectedResource = null;
-            if (SelectedResourcePanel != null)
-                SelectedResourcePanel.IsVisible = false;
-        }
-
-        UpdateResourcePanel();
-        if (!_isDisplaySliding)
-            _ = AnimateMachineDisplayForSelection();
+        // Hide selected panel but keep the current selection and machine display state.
+        // Do not clear `_selectedResource` here — page disappearance will handle clearing when appropriate.
+        if (SelectedResourcePanel != null)
+            SelectedResourcePanel.IsVisible = false;
 #endif
     }
     
@@ -648,7 +652,7 @@ public partial class LaboratoryPage : ContentPage
                 System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Deselecting resource '{resource.Name}'");
                 _selectedResource = null;
                 UpdateSelectedResourcePanelVisibility();
-                UpdateResourcePanel();
+                UpdateResourceItemSelectionVisuals();
                 UpdateMachineContentVisual();
                 _ = AnimateMachineDisplayForSelection();
             }
@@ -679,9 +683,250 @@ public partial class LaboratoryPage : ContentPage
 #endif
         
         // Update UI
-        UpdateResourcePanel();
+        // Update selection visuals without rebuilding the whole panel to avoid image flicker
+        UpdateResourceItemSelectionVisuals();
         UpdateMachineContentVisual();
         _ = AnimateMachineDisplayForSelection();
+    }
+
+    /// <summary>
+    /// Update selection/highlight visuals for resource items using the cached Border elements.
+    /// This avoids recreating the panel during a tap which caused the sprite to flicker.
+    /// </summary>
+    private void UpdateResourceItemSelectionVisuals()
+    {
+#if ANDROID || WINDOWS
+        try
+        {
+            foreach (var kv in _resourceItemCache)
+            {
+                var id = kv.Key;
+                var border = kv.Value;
+
+                if (border == null)
+                    continue;
+
+                // Determine whether this item is selected
+                bool isSelected = _selectedResource != null && _selectedResource.Id == id;
+
+                if (isSelected)
+                {
+                    border.Stroke = Microsoft.Maui.Graphics.Colors.Gold;
+                    border.StrokeThickness = 2;
+                }
+                else
+                {
+                    border.Stroke = Microsoft.Maui.Graphics.Color.FromArgb("#4CAF50");
+                    border.StrokeThickness = 1;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateResourceItemSelectionVisuals error: {ex.Message}");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Replace the MachineDisplay visual with two preloaded Images (off/on) stacked and
+    /// keep references so we toggle Opacity instead of swapping Source to avoid flicker.
+    /// </summary>
+    private void SetupMachineDisplayImages(FurnitureObject display)
+    {
+#if ANDROID || WINDOWS
+        if (display == null || display.VisualElement == null)
+            return;
+
+        // If we've already set up the images, adjust opacity according to selection
+        if (_displayOffImage != null && _displayOnImage != null)
+        {
+            SetDisplayOn(_selectedResource != null, animate: false);
+            return;
+        }
+
+        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] SetupMachineDisplayImages called");
+        // Expect VisualElement to be a Grid created by FurnitureObject
+        if (display.VisualElement is Grid grid)
+        {
+            // Remove any existing children (the default single Image)
+            grid.Children.Clear();
+
+            // Off image (visible by default)
+            _displayOffImage = new Image
+            {
+                Source = "lab__machine_display_off.png",
+                Aspect = Aspect.Fill,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill,
+                Opacity = 1
+            };
+
+            // On image (hidden by default)
+            _displayOnImage = new Image
+            {
+                Source = "lab__machine_display_on.png",
+                Aspect = Aspect.Fill,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill,
+                Opacity = 0
+            };
+
+            grid.Children.Add(_displayOffImage);
+            grid.Children.Add(_displayOnImage);
+
+            // Ensure VisualElement references remain correct
+            display.VisualElement = grid;
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Preloaded MachineDisplay on/off images added to grid");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Create a `MachineDisplayContent` Grid inside the MachineDisplayOverlay furniture object
+    /// The grid is hidden by default and toggled in SetDisplayOn
+    /// </summary>
+    private void SetupMachineDisplayOverlay(FurnitureObject overlay)
+    {
+#if ANDROID || WINDOWS
+        if (overlay == null || overlay.VisualElement == null)
+            return;
+        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] SetupMachineDisplayOverlay called");
+
+        if (_displayContentGrid != null)
+        {
+            // already created; adjust visibility according to current state
+            _displayContentGrid.IsVisible = _selectedResource != null;
+            _displayContentGrid.Opacity = _selectedResource != null ? 1 : 0;
+            _displayContentGrid.InputTransparent = _selectedResource == null;
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] MachineDisplayContent already exists. Visible={_displayContentGrid.IsVisible}");
+            return;
+        }
+
+        if (overlay.VisualElement is Grid grid)
+        {
+            // Create a two-column content grid: left image, right label
+            _displayContentGrid = new Grid
+            {
+                WidthRequest = overlay.Width,
+                HeightRequest = overlay.Height,
+                IsVisible = false,
+                Opacity = 0,
+                InputTransparent = true,
+                AutomationId = "MachineDisplayContent",
+                ColumnDefinitions = new ColumnDefinitionCollection
+                {
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                    new ColumnDefinition { Width = new GridLength(0, GridUnitType.Auto) }
+                },
+                RowDefinitions = new RowDefinitionCollection
+                {
+                    new RowDefinition { Height = GridLength.Star }
+                }
+            };
+
+            // Left: image (preserve aspect, expand)
+            _displayContentImage = new Image
+            {
+                Aspect = Aspect.AspectFit,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill
+            };
+            Grid.SetColumn(_displayContentImage, 0);
+
+            // Right: label showing extraction amount
+            double titleSize = 14;
+            try
+            {
+                var appRes = Application.Current?.Resources;
+                if (appRes != null && appRes.ContainsKey("ResourcePanelTitleSize"))
+                    titleSize = (double)appRes["ResourcePanelTitleSize"] * 2;
+                else if (Resources.ContainsKey("ResourcePanelTitleSize"))
+                    titleSize = (double)Resources["ResourcePanelTitleSize"] * 2;
+            }
+            catch { }
+
+            _displayContentLabel = new Label
+            {
+                Text = "x0",
+                VerticalTextAlignment = TextAlignment.Center,
+                HorizontalTextAlignment = TextAlignment.Center,
+                FontSize = titleSize,
+                Margin = new Thickness(8, 0, 8, 0)
+            };
+            Grid.SetColumn(_displayContentLabel, 1);
+
+            _displayContentGrid.Children.Add(_displayContentImage);
+            _displayContentGrid.Children.Add(_displayContentLabel);
+
+            grid.Children.Add(_displayContentGrid);
+            overlay.VisualElement = grid;
+
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] MachineDisplayContent grid created with image+label");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Toggle the MachineDisplay between on/off by fading the preloaded images.
+    /// </summary>
+    private void SetDisplayOn(bool on, bool animate = true)
+    {
+#if ANDROID || WINDOWS
+                        // Toggle preloaded on/off images and show/hide overlay content grid
+        try
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] SetDisplayOn called. on={on}, animate={animate}");
+            if (_displayOffImage == null || _displayOnImage == null)
+                return;
+
+            if (animate)
+            {
+                // Cross-fade quickly to avoid visible reloads
+                if (on)
+                {
+                    _ = _displayOnImage.FadeTo(1, 120, Easing.Linear);
+                    _ = _displayOffImage.FadeTo(0, 120, Easing.Linear);
+                }
+                else
+                {
+                    _ = _displayOnImage.FadeTo(0, 120, Easing.Linear);
+                    _ = _displayOffImage.FadeTo(1, 120, Easing.Linear);
+                }
+            }
+            else
+            {
+                _displayOnImage.Opacity = on ? 1 : 0;
+                _displayOffImage.Opacity = on ? 0 : 1;
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (_displayContentGrid != null)
+            {
+                if (on)
+                {
+                    _displayContentGrid.IsVisible = true;
+                    _displayContentGrid.InputTransparent = false;
+                    if (animate)
+                        _ = _displayContentGrid.FadeTo(1, 120, Easing.Linear);
+                    else
+                        _displayContentGrid.Opacity = 1;
+                }
+                else
+                {
+                    _displayContentGrid.InputTransparent = true;
+                    if (animate)
+                        _ = _displayContentGrid.FadeTo(0, 120, Easing.Linear);
+                    else
+                        _displayContentGrid.Opacity = 0;
+                }
+            }
+        }
+        catch { }
+#endif
     }
     
     // ============================================================================
@@ -747,6 +992,7 @@ public partial class LaboratoryPage : ContentPage
         var machine = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineContent");
         if (machine == null || machine.VisualElement == null)
             return;
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateMachineContentVisual: selectedResource={_selectedResource?.Name ?? "null"}");
 
         // If a resource is selected, set the image source and show the element
         if (_selectedResource != null)
@@ -755,13 +1001,45 @@ public partial class LaboratoryPage : ContentPage
             if (machine.VisualElement is Grid grid && grid.Children.Count > 0 && grid.Children[0] is Image img)
             {
                 img.Source = _selectedResource.Sprite ?? string.Empty;
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Set MachineContent image to {_selectedResource.Sprite}");
             }
             machine.VisualElement.IsVisible = true;
+
+            // Update overlay content image and label if present
+            if (_displayContentImage != null)
+            {
+                _displayContentImage.Source = _selectedResource.Sprite ?? string.Empty;
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Set overlay image to {_selectedResource.Sprite}");
+            }
+            if (_displayContentLabel != null)
+            {
+                _displayContentLabel.Text = "x" + (_selectedResource.AmountForExtraction?.ToString() ?? "0");
+                try
+                {
+                    var appRes = Application.Current?.Resources;
+                    if (appRes != null && appRes.ContainsKey("ResourcePanelTitleFont"))
+                        _displayContentLabel.FontFamily = (string)appRes["ResourcePanelTitleFont"];
+                }
+                catch { }
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Set overlay label to {_displayContentLabel.Text}");
+            }
         }
         else
         {
             // Hide machine content when no resource selected
             machine.VisualElement.IsVisible = false;
+
+            if (_displayContentImage != null)
+            {
+                _displayContentImage.Source = string.Empty;
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Cleared overlay image");
+            }
+            if (_displayContentLabel != null)
+            {
+                _displayContentLabel.Text = "x0";
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Cleared overlay label");
+            }
+            SetDisplayOn(false, animate: false);
         }
 #endif
     }
@@ -769,6 +1047,7 @@ public partial class LaboratoryPage : ContentPage
     private async Task AnimateMachineDisplayForSelection()
     {
 #if ANDROID || WINDOWS
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] AnimateMachineDisplayForSelection start. selectedResource={_selectedResource?.Name ?? "null"}");
         // cancel any previous pending delay so new actions take precedence
         try { _displayAnimationCts?.Cancel(); } catch { }
         _displayAnimationCts?.Dispose();
@@ -793,6 +1072,7 @@ public partial class LaboratoryPage : ContentPage
             {
                 // Slide out to reveal at X=480 (translation -> 0)
                 _isDisplaySliding = true;
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding display out to visible (TranslateTo 0)");
                 await display.VisualElement.TranslateTo(0, 0, 600, Easing.CubicInOut);
                 _isDisplaySliding = false;
 
@@ -810,10 +1090,10 @@ public partial class LaboratoryPage : ContentPage
                     if (_selectedResource == null)
                     {
                         // Immediately set display image to off when sliding back starts
-                        if (display.VisualElement is Grid dgOffPre && dgOffPre.Children.Count > 0 && dgOffPre.Children[0] is Image diOffPre)
-                            diOffPre.Source = "lab__machine_display_off.png";
+                        SetDisplayOn(false, animate: false);
 
                         _isDisplaySliding = true;
+                        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding display back to hidden (TranslateTo -480)");
                         await display.VisualElement.TranslateTo(-480, 0, 400, Easing.CubicInOut);
                         _isDisplaySliding = false;
 
@@ -826,16 +1106,16 @@ public partial class LaboratoryPage : ContentPage
                 // After delay, if selection still present, switch sprite on
                 if (_selectedResource != null)
                 {
-                    if (display.VisualElement is Grid dg && dg.Children.Count > 0 && dg.Children[0] is Image dimg)
-                        dimg.Source = "lab__machine_display_on.png";
+                    // Switch to "on" visual using preloaded images
+                    SetDisplayOn(true, animate: true);
                 }
                 else
                 {
                     // Otherwise, set image off immediately and slide back; notify end after slide completes
-                    if (display.VisualElement is Grid dgOff2Pre && dgOff2Pre.Children.Count > 0 && dgOff2Pre.Children[0] is Image diOff2Pre)
-                        diOff2Pre.Source = "lab__machine_display_off.png";
+                    SetDisplayOn(false, animate: false);
 
                     _isDisplaySliding = true;
+                    System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding display back to hidden (TranslateTo -480)");
                     await display.VisualElement.TranslateTo(-480, 0, 400, Easing.CubicInOut);
                     _isDisplaySliding = false;
 
@@ -846,8 +1126,7 @@ public partial class LaboratoryPage : ContentPage
             {
                 // Slide back to hidden position (translation -> -480)
                 // Immediately set display image to off when sliding back starts
-                if (display.VisualElement is Grid dg2Pre && dg2Pre.Children.Count > 0 && dg2Pre.Children[0] is Image dimg2Pre)
-                    dimg2Pre.Source = "lab__machine_display_off.png";
+                SetDisplayOn(false, animate: false);
 
                 _isDisplaySliding = true;
                 await display.VisualElement.TranslateTo(-480, 0, 400, Easing.CubicInOut);

@@ -14,6 +14,9 @@ namespace Outgrowth
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+                    // Add Silkscreen fonts for resource panels
+                    fonts.AddFont("Silkscreen-Regular.ttf", "SilkscreenRegular");
+                    fonts.AddFont("Silkscreen-Bold.ttf", "SilkscreenBold");
                 });
 
 #if DEBUG

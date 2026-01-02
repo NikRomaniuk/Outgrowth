@@ -1,0 +1,26 @@
+name: Clear UPDATE.md after push
+on:
+  push:
+
+jobs:
+  clear-update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Check and clear UPDATE.md
+        run: |
+          file="UPDATE.md"
+          if [ -f "$file" ] && [ -s "$file" ]; then
+            echo "Clearing $file and committing..."
+            printf "" > "$file"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$file"
+            git commit -m "Clear UPDATE.md [skip ci]" || echo "No changes to commit"
+            git push
+          else
+            echo "$file is empty or missing, nothing to do."
+          fi

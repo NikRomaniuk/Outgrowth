@@ -85,9 +85,9 @@ public class ScreenProperties
     /// <param name="adaptiveScale">Scale factor where 1.0 == Windows 1920px baseline.</param>
     public void UpdateFontSizes(double adaptiveScale)
     {
-        const double baseTitleSize = 40.0;
-        const double baseBodySize = 25.0;
-        const double baseQtySize = 25.0;
+        const double baseTitleSize = 30.0;
+        const double baseBodySize = 20.0;
+        const double baseQtySize = 20.0;
         const double baseIconSize = 80.0;
 
         var resources = Application.Current?.Resources;
@@ -98,6 +98,22 @@ public class ScreenProperties
         resources["ResourcePanelBodySize"] = baseBodySize * adaptiveScale;
         resources["ResourcePanelQtySize"] = baseQtySize * adaptiveScale;
         resources["ResourcePanelIconSize"] = baseIconSize * adaptiveScale;
+        // Set font family resources (registered in MauiProgram fonts)
+        // Use SilkscreenBold for titles and SilkscreenRegular for body/qty
+        if (!resources.ContainsKey("ResourcePanelTitleFont"))
+            resources["ResourcePanelTitleFont"] = "SilkscreenBold";
+        else
+            resources["ResourcePanelTitleFont"] = "SilkscreenBold";
+
+        if (!resources.ContainsKey("ResourcePanelBodyFont"))
+            resources["ResourcePanelBodyFont"] = "SilkscreenRegular";
+        else
+            resources["ResourcePanelBodyFont"] = "SilkscreenRegular";
+
+        if (!resources.ContainsKey("ResourcePanelQtyFont"))
+            resources["ResourcePanelQtyFont"] = "SilkscreenRegular";
+        else
+            resources["ResourcePanelQtyFont"] = "SilkscreenRegular";
     }
     
     public static void Reset()

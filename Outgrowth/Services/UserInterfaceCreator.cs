@@ -127,6 +127,14 @@ public static class UserInterfaceCreator
                 VerticalOptions = LayoutOptions.Center,
                 HorizontalOptions = LayoutOptions.End
             };
+            // Apply font family if available
+            try
+            {
+                var appRes = Application.Current?.Resources;
+                if (appRes != null && appRes.ContainsKey("ResourcePanelQtyFont"))
+                    qtyLabel.FontFamily = (string)appRes["ResourcePanelQtyFont"];
+            }
+            catch { }
             if (bindingContext != null)
             {
                 qtyLabel.BindingContext = bindingContext;
@@ -196,6 +204,13 @@ public static class UserInterfaceCreator
                 VerticalOptions = LayoutOptions.Center,
                 HorizontalOptions = LayoutOptions.Start
             };
+            try
+            {
+                var appRes = Application.Current?.Resources;
+                if (appRes != null && appRes.ContainsKey("ResourcePanelBodyFont"))
+                    nameLabel.FontFamily = (string)appRes["ResourcePanelBodyFont"];
+            }
+            catch { }
             Grid.SetColumn(nameLabel, 1);
             Grid.SetRow(nameLabel, 0);
             contentGrid.Children.Add(nameLabel);
@@ -208,6 +223,13 @@ public static class UserInterfaceCreator
                 VerticalOptions = LayoutOptions.Center,
                 HorizontalOptions = LayoutOptions.Start
             };
+            try
+            {
+                var appRes = Application.Current?.Resources;
+                if (appRes != null && appRes.ContainsKey("ResourcePanelQtyFont"))
+                    qtyLabel.FontFamily = (string)appRes["ResourcePanelQtyFont"];
+            }
+            catch { }
             if (bindingContext != null)
             {
                 qtyLabel.BindingContext = bindingContext;

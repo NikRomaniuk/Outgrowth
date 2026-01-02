@@ -129,6 +129,8 @@ dotnet build -f net9.0-android
 - ✅ Android immersive fullscreen mode
 - ✅ Persistent save/load for plants, materials, and game state
 
+- ✅ Misc fixes and UI improvements (2026-01-02): fixed ResourceItem/ResourceSlot sprite flicker, preloaded MachineDisplay images and cross-faded to prevent flicker, added MachineDisplayContent (resource image + amount), registered Silkscreen fonts for panels, and added debug logs for display animations
+
 ### Coming Soon
 - Research progression and chemical extraction
 - Trading, quests, and expeditions
@@ -151,5 +153,5 @@ This is an educational project. All rights reserved
 
 ---
 
-**Status**: 🚧 In Active Development | **Last Updated**: January 1, 2026
+**Status**: 🚧 In Active Development | **Last Updated**: January 2, 2026
 
