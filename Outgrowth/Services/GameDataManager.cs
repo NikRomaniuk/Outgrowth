@@ -203,6 +203,26 @@ public static class GameDataManager
                 System.Diagnostics.Debug.WriteLine($"[GameDataManager] Error applying saved material quantities: {ex.Message}");
             }
 
+            // Ensure player has at least one grass seed on first run if none exist
+            try
+            {
+                if (Seeds.IsInitialized)
+                {
+                    var grassSeed = Seeds.Get("grass_seed");
+                    if (grassSeed != null && grassSeed.Quantity <= 0)
+                    {
+                        grassSeed.Quantity = 1;
+                        System.Diagnostics.Debug.WriteLine("[GameDataManager] No grass seeds found; granting 1 grass_seed on startup.");
+                        // Persist the granted seed immediately so save files reflect the change
+                        SaveMaterialsState();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GameDataManager] Error ensuring starter seeds: {ex.Message}");
+            }
+
             _isInitialized = true;
             var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
             System.Diagnostics.Debug.WriteLine($"[GameDataManager] All libraries initialized in {elapsed:F0}ms");

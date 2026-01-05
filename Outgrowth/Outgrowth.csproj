@@ -20,6 +20,9 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
+		<!-- Allow unsafe blocks required for WinRT generic interface codegen (CsWinRT) -->
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
 		<!-- Display name -->
 		<ApplicationTitle>Outgrowth</ApplicationTitle>
 
@@ -73,6 +76,9 @@
 		
 		<!-- Resources Sprites (pre-scaled, no resizing needed) -->
 		<MauiImage Include="Resources\Images\Sprites\Resources\*" Resize="False" />
+
+		<!-- UI Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\UI\*" Resize="False" />
 		
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />

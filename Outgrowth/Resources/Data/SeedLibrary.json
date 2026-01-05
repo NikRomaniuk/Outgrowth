@@ -6,6 +6,13 @@
       "description": "Basic seed for growing simple grass plants",
       "sprite": "seeds__grass.png",
       "plantId": "grass"
+    },
+    {
+      "id": "lumivial_seed",
+      "name": "Lumivial",
+      "description": "A leafy top severed from a mature fruit\nThe separation requires specialized high-precision laboratory tools to keep the neural-fibers intact. Without industrial-grade equipment, the crown withered instantly, making it a rare commodity found only in professional trade circuits",
+      "sprite": "seeds__lumivial.png",
+      "plantId": "lumivial"
     }
 
   ]

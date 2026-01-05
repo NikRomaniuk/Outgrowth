@@ -3,7 +3,7 @@
     {
       "id": "grass",
       "name": "Grass",
-      "description": "Essential liquid for plant growth and hydration.",
+      "description": "It's a grass. What did you expect?",
       "sprite": "resource__grass_leaves.png",
       "baseValue": 1.0,
       "extractionResult": {
@@ -12,14 +12,13 @@
       "amountForExtraction": 5
     },
     {
-      "id": "lum",
-      "name": "Lum",
-      "description": "Oaoaoaoaoaoaoa",
-      "sprite": "💡",
+      "id": "glow_head",
+      "name": "Glow Head",
+      "description": "A translucent organic container that traps light within. It remains luminous (almost) for ages after harvest, emitting a cold glow that is hauntingly indistinguishable from the light of distant stars",
+      "sprite": "resource__glow_head.png",
       "baseValue": 5.0,
       "extractionResult": {
-        "lumnium": 1,
-        "chloro_juice": 1
+        "lumi_nectar": 1
       },
       "amountForExtraction": 1
     }

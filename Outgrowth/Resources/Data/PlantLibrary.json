@@ -3,9 +3,15 @@
     {
       "id": "grass",
       "name": "Grass",
-      "description": "Simple grass plant that grows quickly.",
+      "description": "Simple grass plant that grows quickly",
       "plantSize": "Small",
-      "growthStageSprites": ["grass_s00_v01.png","grass_s01_v01.png", "grass_s02_v01.png", "grass_s03_v01.png", "grass_s04_v01.png", "grass_s05_v01.png"],
+      "growthStageSprites":
+        [ "grass_s00_v01.png",
+          "grass_s01_v01.png",
+          "grass_s02_v01.png",
+          "grass_s03_v01.png",
+          "grass_s04_v01.png",
+          "grass_s05_v01.png"],
       "growthStageCycles": [1, 1, 1, 2, 2, 0]
       ,
       "stageDrops": [
@@ -14,22 +20,34 @@
         [],
         [],
         [ { "materialId": "grass", "min": 1, "max": 2 } ],
-        [ { "materialId": "grass", "min": 2, "max": 5 } ]
+        [ { "materialId": "grass", "min": 3, "max": 5 } ]
       ]
     },
     {
-      "id": "lum_plant",
-      "name": "Lumnius Flower",
-      "description": "Oaoaoaooaoaoa",
+      "id": "lumivial",
+      "name": "Lumivial",
+      "description": "Looks like a desk lamp, tastes like a science experiment. A unique plant that grows its own glowing storage pod",
       "plantSize": "Small",
-      "growthStageSprites": ["🌱", "🌿", "🌸", "🌺"],
-      "growthStageCycles": [3, 4, 5, 0]
+      "growthStageSprites":
+        [ "plant__lumivial_s00_v01.png",
+          "plant__lumivial_s01_v01.png",
+          "plant__lumivial_s02_v01.png",
+          "plant__lumivial_s03_v01.png",
+          "plant__lumivial_s04_v01.png",
+          "plant__lumivial_s05_v01.png",
+          "plant__lumivial_s06_v01.png",
+          "plant__lumivial_s07_v01.png"],
+      "growthStageCycles": [3, 1, 1, 2, 2, 3, 4, 0]
       ,
       "stageDrops": [
         [],
         [],
-        [ { "materialId": "lum_petal", "min": 0, "max": 1 } ],
-        [ { "materialId": "lum_petal", "min": 1, "max": 2 }, { "materialId": "lum_seed", "min": 0, "max": 1 } ]
+        [],
+        [ { "materialId": "grass", "min": 1, "max": 1 } ],
+        [ { "materialId": "grass", "min": 1, "max": 1 }, { "materialId": "glow_head", "min": 0, "max": 1 } ],
+        [ { "materialId": "grass", "min": 1, "max": 2 }, { "materialId": "glow_head", "min": 1, "max": 1 } ],
+        [ { "materialId": "grass", "min": 1, "max": 2 }, { "materialId": "glow_head", "min": 1, "max": 2 } ],
+        [ { "materialId": "grass", "min": 2, "max": 2 }, { "materialId": "glow_head", "min": 3, "max": 3 } ]
       ]
     }
   ]

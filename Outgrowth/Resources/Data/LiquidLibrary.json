@@ -9,14 +9,14 @@
     {
       "id": "chloro_juice",
       "name": "Chloro-Juice",
-      "description": "Why would you need this?",
+      "description": "Why would you need this? It smells like pure freshness, at least",
       "sprite": "liquid__chloro_juice.png"
     },
     {
-      "id": "lumnium",
-      "name": "Lumnium",
-      "description": "Placeholder",
-      "sprite": "💡"
+      "id": "lumi_nectar",
+      "name": "Lumi-Nectar",
+      "description": "Strange, glowing slime with no scent. It remains luminous for several hours after harvest, but emits no warmth",
+      "sprite": "liquid__lum_nectar.png"
     }
   ]
 }

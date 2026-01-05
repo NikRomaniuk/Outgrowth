@@ -18,7 +18,7 @@ public partial class LaboratoryPage : ContentPage
     private readonly List<StationObject> _stationObjects = new()
     {
         new StationObject("ResourceSlot", 0, (0 + 80), 160, 160),
-        new StationObject("Extract", 0, -200, 250, 250)
+        new StationObject("ExtractButton", 480, (0 - 240), 160, 160)
     };
     
     // Furniture objects - created dynamically on page load
@@ -29,6 +29,7 @@ public partial class LaboratoryPage : ContentPage
         new FurnitureObject("MachineLight", 0, (0 - 240), 160, 160, "lab__machine_light_red.png", 110),
         new FurnitureObject("MachineDisplay", 480, (0), 480, 320, "lab__machine_display_off.png", 90),
         new FurnitureObject("MachineDisplayOverlay", 520, (0), 240, 240, "", 100),
+        new FurnitureObject("MachineDisplayButton", 480, (0), 160, 160, "lab__machine_ready_button.png", 85),
         new FurnitureObject("MachineContent", 0, (0 + 80), 160, 160, "", 105)
     };
     
@@ -45,6 +46,11 @@ public partial class LaboratoryPage : ContentPage
     private CancellationTokenSource? _displayAnimationCts;
     // Cache for resource panel items to enable/disable during animation
     private Dictionary<string, Border> _resourceItemCache = new();
+    // 9-Slice panel container and its content scroll view
+    private Grid? _nineSlicePanelContainer;
+    private ScrollView? _panelContentScroll;
+    // Dynamically created SelectedResourcePanel (Android only)
+    private VisualElement? _selectedResourcePanel;
     
     // Events for display animation lifecycle
     public event EventHandler? DisplayAnimationStarted;
@@ -56,6 +62,11 @@ public partial class LaboratoryPage : ContentPage
     private Microsoft.Maui.Controls.Grid? _displayContentGrid;
     private Microsoft.Maui.Controls.Image? _displayContentImage;
     private Microsoft.Maui.Controls.Label? _displayContentLabel;
+    // Machine light preloaded images (red/green) to cross-fade without reloading
+    private Microsoft.Maui.Controls.Image? _machineLightRedImage;
+    private Microsoft.Maui.Controls.Image? _machineLightGreenImage;
+    // Machine display button image cache
+    private Microsoft.Maui.Controls.Image? _machineButtonImage;
     
 #if WINDOWS
     private WindowsInput? _windowsInput;
@@ -66,11 +77,21 @@ public partial class LaboratoryPage : ContentPage
         InitializeComponent();
         BindingContext = new LaboratoryViewModel();
         
-        // Set up station object click handlers
-        _stationObjects[0].Clicked += (s, e) => OnResourceSlotClicked(s ?? this, e);
+        // Set up station object click handlers (only invoke when station.CanInteract)
+        _stationObjects[0].Clicked += (s, e) =>
+        {
+            var st = _stationObjects[0];
+            if (st.CanInteract)
+                OnResourceSlotClicked(s ?? this, e);
+        };
         _stationObjects[0].InteractAction = () => System.Diagnostics.Debug.WriteLine("Resource Slot interacted");
-        
-        _stationObjects[1].Clicked += (s, e) => OnExtractClicked(s ?? this, e);
+
+        _stationObjects[1].Clicked += (s, e) =>
+        {
+            var st = _stationObjects[1];
+            if (st.CanInteract)
+                OnExtractClicked(s ?? this, e);
+        };
         _stationObjects[1].InteractAction = () => System.Diagnostics.Debug.WriteLine("Extract interacted");
         
         // Handle page size changes for scaling
@@ -106,11 +127,32 @@ public partial class LaboratoryPage : ContentPage
             // Ensure the image shows the "off" sprite
             SetupMachineDisplayImages(display);
         }
+        // Prepare machine light preloaded images
+        var light = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineLight");
+        if (light != null && light.VisualElement != null)
+        {
+            SetupMachineLightImages(light);
+        }
         // Prepare overlay content grid (hidden by default)
         var overlay = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayOverlay");
         if (overlay != null && overlay.VisualElement != null)
         {
             SetupMachineDisplayOverlay(overlay);
+        }
+        // Ensure MachineDisplayButton is hidden initially
+        var buttonObj = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayButton");
+        if (buttonObj != null && buttonObj.VisualElement != null)
+        {
+            buttonObj.VisualElement.IsVisible = false;
+            buttonObj.VisualElement.TranslationY = 0;
+        }
+        // Ensure ExtractButton is not interactable until the MachineDisplayButton is shown
+        var extractStation = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+        if (extractStation != null)
+        {
+            extractStation.CanInteract = false;
+            if (extractStation.VisualElement is View ev)
+                ev.InputTransparent = true;
         }
         UpdateMachineContentVisual();
         System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] OnPageLoaded: selectedResource={_selectedResource?.Name ?? "null"}, displayTranslation={display?.VisualElement?.TranslationX}");
@@ -130,13 +172,7 @@ public partial class LaboratoryPage : ContentPage
             ResourceListContainer.Scale = ResourceListContainer.IsVisible ? 1 : 0;
         }
         
-        // Initialize selected resource panel scale for animation
-        if (SelectedResourcePanel != null)
-        {
-            SelectedResourcePanel.AnchorX = 0.5;
-            SelectedResourcePanel.AnchorY = 0.5;
-            SelectedResourcePanel.Scale = SelectedResourcePanel.IsVisible ? 1 : 0;
-        }
+        // SelectedResourcePanel removed from XAML; will be created dynamically on Android inside UpdateResourcePanel
         
 #if WINDOWS
         // Attach Windows keyboard input handler (only Esc for closing panels)
@@ -258,6 +294,16 @@ public partial class LaboratoryPage : ContentPage
                 EnvironmentContainer.Children.Remove(furniture.VisualElement);
             }
         }
+
+        // Clear cached display references so they are recreated on next load
+        _displayOffImage = null;
+        _displayOnImage = null;
+        _displayContentGrid = null;
+        _displayContentImage = null;
+        _displayContentLabel = null;
+        _machineLightRedImage = null;
+        _machineLightGreenImage = null;
+        _machineButtonImage = null;
 #endif
     }
 
@@ -355,13 +401,7 @@ public partial class LaboratoryPage : ContentPage
         ResourceListPlaceholder.HeightRequest = baseHeight;
         ResourceListPlaceholder.Margin = new Thickness(0, 0, baseMargin, 0);
 
-        if (SelectedResourcePanel != null)
-        {
-            SelectedResourcePanel.WidthRequest = sizes.SelectedWidth;
-            SelectedResourcePanel.HeightRequest = sizes.SelectedHeight;
-            // keep previous behaviour: right margin
-            SelectedResourcePanel.Margin = new Thickness(0, 0, sizes.SelectedMarginLeft, 0);
-        }
+        // SelectedResourcePanel removed; selected-panel sizing handled elsewhere when recreated
     }
 
     /// <summary>
@@ -436,10 +476,129 @@ public partial class LaboratoryPage : ContentPage
 #endif
     }
 
-    private void OnExtractClicked(object? sender, EventArgs e)
+    private async void OnExtractClicked(object? sender, EventArgs e)
     {
-        // TODO: Implement extract functionality
-        System.Diagnostics.Debug.WriteLine("Extract button clicked");
+        // Perform extraction: consume required amount from selected resource
+        // and add extractionResult items to player liquids, then persist state.
+#if ANDROID || WINDOWS
+        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Extract button clicked");
+
+        if (_selectedResource == null)
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Extract: no resource selected");
+            return;
+        }
+
+        int required = _selectedResource.AmountForExtraction ?? 0;
+        if (required <= 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Extract: resource '{_selectedResource.Name}' has no AmountForExtraction configured");
+            return;
+        }
+
+        if (_selectedResource.Quantity < required)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Extract: not enough '{_selectedResource.Name}' (have {_selectedResource.Quantity}, need {required})");
+            return;
+        }
+
+        try
+        {
+            // Consume resources
+            _selectedResource.Quantity -= required;
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Extracted {required} of {_selectedResource.Name}. Remaining: {_selectedResource.Quantity}");
+
+            // Add extraction results to liquids (or other categories if needed)
+            if (_selectedResource.ExtractionResult != null)
+            {
+                foreach (var kv in _selectedResource.ExtractionResult)
+                {
+                    var liquidId = kv.Key;
+                    var qty = kv.Value;
+                    if (string.IsNullOrEmpty(liquidId) || qty <= 0)
+                        continue;
+
+                    var liquid = GameDataManager.Liquids.Get(liquidId);
+                    if (liquid != null)
+                    {
+                        liquid.Quantity += qty;
+                        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Added {qty}x {liquidId} (new qty={liquid.Quantity})");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Extract: unknown liquid id '{liquidId}' in extraction result");
+                    }
+                }
+            }
+
+            // Persist current material quantities
+            GameDataManager.SaveMaterialsState();
+
+            // Do not disable the resource panel item (avoid recreating UI);
+            // instead check whether we still have enough for another extraction.
+            bool hasEnough = _selectedResource.Quantity >= required;
+
+            // If not enough for another extraction, slide the MachineDisplayButton back and set light to red
+            if (!hasEnough)
+            {
+                var buttonFurniture = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayButton");
+                var buttonView = buttonFurniture?.VisualElement;
+                try
+                {
+                    if (buttonView != null && buttonView.IsVisible && buttonView.TranslationY > 10)
+                    {
+                        await buttonView.TranslateTo(0, 0, 300, Easing.CubicIn);
+                    }
+                    if (buttonView != null)
+                    {
+                        buttonView.IsVisible = false;
+                        buttonView.TranslationY = 0;
+                    }
+                }
+                catch { }
+
+                // Force light to red
+                try
+                {
+                    if (_machineLightGreenImage != null && _machineLightRedImage != null)
+                    {
+                        _ = _machineLightGreenImage.FadeTo(0, 120, Easing.Linear);
+                        _ = _machineLightRedImage.FadeTo(1, 120, Easing.Linear);
+                    }
+                }
+                catch { }
+
+                // Disable extract station (no further extracts possible)
+                var extractStation = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+                if (extractStation != null)
+                {
+                    extractStation.CanInteract = false;
+                    if (extractStation.VisualElement is View evd)
+                        evd.InputTransparent = true;
+                }
+            }
+            else
+            {
+                // Still enough: ensure ExtractButton remains interactable
+                var extractStation = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+                if (extractStation != null)
+                {
+                    extractStation.CanInteract = true;
+                    if (extractStation.VisualElement is View ev)
+                        ev.InputTransparent = false;
+                }
+            }
+
+            // Refresh lightweight visuals (selection stroke) only
+            UpdateResourceItemSelectionVisuals();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error during extraction: {ex.Message}");
+        }
+#else
+        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Extract clicked (unsupported platform)");
+#endif
     }
 
     // ============================================================================
@@ -461,32 +620,17 @@ public partial class LaboratoryPage : ContentPage
         ResourceListContainer.IsVisible = true;
         ResourceListContainer.InputTransparent = false;
         
-        // Prepare selected panel for animation (Android only)
-        Task? selectedPanelTask = null;
-#if ANDROID
-        UpdateSelectedResourcePanelVisibility();
-        if (SelectedResourcePanel != null && SelectedResourcePanel.IsVisible)
-        {
-            SelectedResourcePanel.AnchorX = 0.5;
-            SelectedResourcePanel.AnchorY = 0.5;
-            SelectedResourcePanel.Scale = 0;
-        }
-#elif WINDOWS
-        if (SelectedResourcePanel != null)
-            SelectedResourcePanel.IsVisible = false;
-#endif
+        // No separate selected panel animation here (SelectedResourcePanel removed)
         
-        // Animate panels opening in parallel
+        // Animate panels opening in parallel (main + selected panel)
         var mainPanelTask = ResourceListContainer.ScaleTo(1, 200, Easing.SpringOut);
-#if ANDROID
-        if (SelectedResourcePanel != null && SelectedResourcePanel.IsVisible)
-            selectedPanelTask = SelectedResourcePanel.ScaleTo(1, 200, Easing.SpringOut);
-#endif
-        
+    #if ANDROID
+        var selectedTask = UpdateSelectedResourcePanelVisibility(forceHide: false);
+        await Task.WhenAll(mainPanelTask, selectedTask);
+    #else
         await mainPanelTask;
-        if (selectedPanelTask != null)
-            await selectedPanelTask;
-        
+    #endif
+
         _isAnimating = false;
 #else
         await Task.CompletedTask;
@@ -501,37 +645,21 @@ public partial class LaboratoryPage : ContentPage
         
         _isAnimating = true;
         
-        // Prepare selected panel for closing animation (Android only)
-        Task? selectedPanelTask = null;
-#if ANDROID
-        if (SelectedResourcePanel != null && SelectedResourcePanel.IsVisible)
-        {
-            SelectedResourcePanel.AnchorX = 0.5;
-            SelectedResourcePanel.AnchorY = 0.5;
-            selectedPanelTask = SelectedResourcePanel.ScaleTo(0, 200, Easing.SpringIn);
-        }
-#endif
+        // No selected panel closing animation (SelectedResourcePanel removed)
         
-        // Animate main panel closing
-        await ResourceListContainer.ScaleTo(0, 200, Easing.SpringIn);
-        
-        // Wait for selected panel animation to complete
-        if (selectedPanelTask != null)
-            await selectedPanelTask;
-        
+        // Animate main panel closing and selected panel hiding in parallel
+    #if ANDROID
+        var mainPanelTask = ResourceListContainer.ScaleTo(0, 200, Easing.SpringIn);
+        var selectedTask = UpdateSelectedResourcePanelVisibility(forceHide: true);
+        await Task.WhenAll(mainPanelTask, selectedTask);
         // Clean up after animation: hide panels but keep current selection and machine state
         ResourceListContainer.IsVisible = false;
         ResourceListContainer.InputTransparent = true;
-
-    #if ANDROID
-        if (SelectedResourcePanel != null)
-        {
-            SelectedResourcePanel.IsVisible = false;
-            SelectedResourcePanel.Scale = 0;
-        }
-    #elif WINDOWS
-        if (SelectedResourcePanel != null)
-            SelectedResourcePanel.IsVisible = false;
+    #else
+        // Animate main panel closing
+        await ResourceListContainer.ScaleTo(0, 200, Easing.SpringIn);
+        ResourceListContainer.IsVisible = false;
+        ResourceListContainer.InputTransparent = true;
     #endif
 
         // IMPORTANT: do NOT clear `_selectedResource` nor trigger `AnimateMachineDisplayForSelection()` here.
@@ -556,15 +684,20 @@ public partial class LaboratoryPage : ContentPage
         ResourceListContainer.IsVisible = false;
         ResourceListContainer.InputTransparent = true;
         
-        // Hide selected panel but keep the current selection and machine display state.
-        // Do not clear `_selectedResource` here — page disappearance will handle clearing when appropriate.
-        if (SelectedResourcePanel != null)
-            SelectedResourcePanel.IsVisible = false;
+        // Hide dynamic SelectedResourcePanel on Android when closing
+    #if ANDROID
+        if (_selectedResourcePanel != null)
+        {
+            _selectedResourcePanel.IsVisible = false;
+            _selectedResourcePanel.Scale = 0;
+        }
+    #endif
 #endif
     }
     
     /// <summary>
     /// Updates the ResourcePanel with all available resources from ResourceLibrary
+    /// Creates a 9-Slice panel with pixel-art style if not already created
     /// </summary>
     private void UpdateResourcePanel()
     {
@@ -577,21 +710,214 @@ public partial class LaboratoryPage : ContentPage
         
         System.Diagnostics.Debug.WriteLine("[LaboratoryPage] UpdateResourcePanel: Updating resource panel");
         
-        // Clear existing items and cache
-        ResourcesList.Children.Clear();
-        _resourceItemCache.Clear();
-        
-        try
+        // Create 9-slice panel if not already created
+        if (_nineSlicePanelContainer == null)
         {
-            var resources = ResourceLibrary.GetAllResources();
-            foreach (var resource in resources)
+            var screenProps = ScreenProperties.Instance;
+            var adaptive = screenProps.AdaptiveScale;
+            
+#if ANDROID
+            const double baseWidth = 250.0;
+            const double baseHeight = 500.0;
+#else
+            const double baseWidth = 300.0;
+            const double baseHeight = 500.0;
+#endif
+            
+            double panelWidth = baseWidth * adaptive;
+            double panelHeight = baseHeight * adaptive;
+            double cornerSize = 40 * adaptive; // Scale corner size with screen
+            
+            var (panel, scroll) = UserInterfaceCreator.CreateNineSlicePanelWithScroll(
+                panelWidth,
+                panelHeight,
+                cornerSize,
+                Color.FromArgb("#0f0c29"),
+                Color.FromArgb("#302b63"),
+                cornerImage: "ui__panel_corner.png",
+                horizontalEdgeImage: "ui__panel_edge_horizontal.png",
+                verticalEdgeImage: "ui__panel_edge_vertical.png",
+                centerImage: "ui__panel_center.png"
+            );
+            
+            _nineSlicePanelContainer = panel;
+            _panelContentScroll = scroll;
+            try { _nineSlicePanelContainer.AutomationId = "ResourceNineSlicePanel"; } catch { }
+            try { _panelContentScroll.AutomationId = "ResourceScroll"; } catch { }
+            
+            // Replace ResourceListContainer content with 9-slice panel
+            if (ResourceListContainer != null)
             {
-                var resourceItem = CreateResourceItem(resource);
-                _resourceItemCache[resource.Id] = resourceItem;
-                ResourcesList.Children.Add(resourceItem);
+                ResourceListContainer.Children.Clear();
+                ResourceListContainer.Children.Add(_nineSlicePanelContainer);
+                
+                // Set up animation properties
+                _nineSlicePanelContainer.AnchorX = 0.5;
+                _nineSlicePanelContainer.AnchorY = 0.5;
             }
             
-            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Updated ResourcePanel with {resources.Count()} resources");
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Created 9-slice panel: {panelWidth}x{panelHeight}, corner: {cornerSize}");
+        }
+
+        // Create SelectedResourcePanel dynamically on Android (only once)
+#if ANDROID
+        try
+        {
+            // Create selected panel only if missing
+            var missingSelected = UserInterfaceCreator.CheckUiElementsExist(ResourceListWrapper, new[] { "SelectedResourcePanel" });
+            if ((missingSelected is System.Collections.Generic.List<string> miss && miss.Contains("SelectedResourcePanel")) || (_selectedResourcePanel == null && ResourceListWrapper != null))
+            {
+                var screenProps = ScreenProperties.Instance;
+                var adaptive = screenProps.AdaptiveScale;
+
+                const double baseHeight = 500.0;
+                const double baseMargin = 20.0;
+                const double selectedPanelHeight = 160.0;
+                const double baseWidth = 250.0;
+                const double selectedPanelWidth = 250.0;
+
+                var sizes = UserInterfaceCreator.GetPanelSizes(adaptive, baseWidth, baseHeight, baseMargin, selectedPanelWidth, selectedPanelHeight, isAndroid: true);
+
+                double cornerSize = 40 * adaptive;
+
+                // Create label bound to ViewModel.SelectedResourceName
+                var selectedLabel = new Label
+                {
+                    HorizontalOptions = LayoutOptions.Center,
+                    VerticalOptions = LayoutOptions.Center,
+                    TextColor = Colors.White
+                };
+                if (BindingContext != null)
+                {
+                    selectedLabel.BindingContext = BindingContext;
+                    selectedLabel.SetBinding(Label.TextProperty, new Binding("SelectedResourceName"));
+                }
+                
+                try
+                {
+                    selectedLabel.FontFamily = "SilkscreenBold";
+                }
+                catch { }
+
+                var selectedPanel = UserInterfaceCreator.CreateNineSlicePanel(
+                    width: sizes.SelectedWidth,
+                    height: sizes.SelectedHeight,
+                    cornerSize: cornerSize,
+                    backgroundColor: Color.FromArgb("#1A1A1A"),
+                    borderColor: Color.FromArgb("#FFD700"),
+                    content: selectedLabel,
+                    cornerImage: "ui__panel_highlighted_corner.png",
+                    horizontalEdgeImage: "ui__panel_highlighted_edge_horizontal.png",
+                    verticalEdgeImage: "ui__panel_highlighted_edge_vertical.png",
+                    centerImage: "ui__panel_highlighted_center.png"
+                );
+
+                // Wrap the 9-slice panel in a Border so it has a visible stroke/background
+                var wrapperBorder = new Border
+                {
+                    Content = selectedPanel,
+                    Stroke = null,
+                    StrokeThickness = 0
+                };
+
+                // Place in right gutter wrapper at proportional position x=1, y=0.15
+                // Match ResourceListContainer right margin so panel aligns with list
+                wrapperBorder.Margin = new Thickness(0, 0, sizes.Margin, 0);
+                AbsoluteLayout.SetLayoutBounds(wrapperBorder, new Rect(1, 0.15, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+                AbsoluteLayout.SetLayoutFlags(wrapperBorder, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
+
+                // Initial animation/visibility state
+                wrapperBorder.AnchorX = 0.5;
+                wrapperBorder.AnchorY = 0.5;
+                wrapperBorder.Scale = 0;
+                wrapperBorder.IsVisible = false;
+                wrapperBorder.InputTransparent = true;
+
+                    _selectedResourcePanel = wrapperBorder;
+                    try { wrapperBorder.AutomationId = "SelectedResourcePanel"; } catch { }
+                // ensure it's on top of ResourceListContainer
+                _selectedResourcePanel.ZIndex = 1001;
+                ResourceListWrapper.Children.Add(_selectedResourcePanel);
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Created dynamic SelectedResourcePanel (Android)");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error creating SelectedResourcePanel: {ex.Message}");
+        }
+#endif
+        
+        // Get the content stack layout from scroll view
+        if (_panelContentScroll?.Content is not VerticalStackLayout contentStack)
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] UpdateResourcePanel: Content stack layout not found");
+            return;
+        }
+
+        // Use CheckUiElementsExist to avoid recreating existing items
+        try
+        {
+            var resources = ResourceLibrary.GetAllResources().ToList();
+            var requiredIds = resources.Select(r => $"ResourceItem_{r.Id}").ToList();
+
+            var missingObj = UserInterfaceCreator.CheckUiElementsExist(_panelContentScroll as VisualElement ?? (VisualElement?)contentStack, requiredIds);
+
+            if (_resourceItemCache == null)
+                _resourceItemCache = new Dictionary<string, Border>();
+
+            if (missingObj is bool allPresent && allPresent == false)
+            {
+                // All present: update selection visuals only
+                UpdateResourceItemSelectionVisuals();
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Resource items already exist, updated selection visuals");
+            }
+            else if (missingObj is System.Collections.Generic.List<string> missing)
+            {
+                // Create only missing resource items
+                foreach (var missingId in missing)
+                {
+                    var idSuffix = missingId.StartsWith("ResourceItem_") ? missingId.Substring("ResourceItem_".Length) : missingId;
+                    var resource = resources.FirstOrDefault(r => r.Id == idSuffix);
+                    if (resource == null) continue;
+
+                    var resourceItem = CreateResourceItem(resource);
+                    try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
+                    _resourceItemCache[resource.Id] = resourceItem;
+                    contentStack.Children.Add(resourceItem);
+                }
+
+                // Fallback if still missing
+                var stillMissing = UserInterfaceCreator.CheckUiElementsExist(_panelContentScroll as VisualElement ?? (VisualElement?)contentStack, requiredIds);
+                if (!(stillMissing is bool sb && sb == false))
+                {
+                    // Recreate everything as a fallback
+                    contentStack.Children.Clear();
+                    _resourceItemCache.Clear();
+                    foreach (var resource in resources)
+                    {
+                        var resourceItem = CreateResourceItem(resource);
+                        try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
+                        _resourceItemCache[resource.Id] = resourceItem;
+                        contentStack.Children.Add(resourceItem);
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Created {missing.Count} missing resource items");
+            }
+            else
+            {
+                // Unknown result — fall back to full recreation
+                contentStack.Children.Clear();
+                _resourceItemCache.Clear();
+                foreach (var resource in resources)
+                {
+                    var resourceItem = CreateResourceItem(resource);
+                    try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
+                    _resourceItemCache[resource.Id] = resourceItem;
+                    contentStack.Children.Add(resourceItem);
+                }
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Fallback: recreated all resource items");
+            }
         }
         catch (Exception ex)
         {
@@ -648,39 +974,29 @@ public partial class LaboratoryPage : ContentPage
         if (_selectedResource?.Id == resource.Id)
         {
             if (resource.Quantity > 0 && !_isDisplaySliding)
-            {
-                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Deselecting resource '{resource.Name}'");
-                _selectedResource = null;
-                UpdateSelectedResourcePanelVisibility();
-                UpdateResourceItemSelectionVisuals();
-                UpdateMachineContentVisual();
-                _ = AnimateMachineDisplayForSelection();
-            }
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Deselecting resource '{resource.Name}'");
+                    _selectedResource = null;
+                    // Animate/hide the selected resource panel when deselecting
+                    _ = UpdateSelectedResourcePanelVisibility();
+                    UpdateResourceItemSelectionVisuals();
+                    UpdateMachineContentVisual();
+                    _ = AnimateMachineDisplayForSelection();
+                }
             return;
         }
         
-        // Check if selected panel was already visible
-        bool wasAlreadyVisible = SelectedResourcePanel != null && SelectedResourcePanel.IsVisible && SelectedResourcePanel.Scale > 0.1;
+            // Set new selection
+            _selectedResource = resource;
+
+            // Update selected name via ViewModel binding
+            if (BindingContext is LaboratoryViewModel vm)
+                vm.SelectedResourceName = resource.Name;
+
+            // Update dynamic selected panel visibility (Android)
+            _ = UpdateSelectedResourcePanelVisibility();
         
-        // Set new selection
-        _selectedResource = resource;
-        UpdateSelectedResourcePanelVisibility();
-        
-        // Update selected name via ViewModel binding
-        if (BindingContext is LaboratoryViewModel vm)
-            vm.SelectedResourceName = resource.Name;
-        
-        // Animate selected panel appearance (Android only, only if wasn't already visible)
-#if ANDROID
-        if (SelectedResourcePanel != null && SelectedResourcePanel.IsVisible && !wasAlreadyVisible &&
-            ResourceListContainer != null && ResourceListContainer.IsVisible && ResourceListContainer.Scale > 0.1)
-        {
-            SelectedResourcePanel.AnchorX = 0.5;
-            SelectedResourcePanel.AnchorY = 0.5;
-            SelectedResourcePanel.Scale = 0;
-            _ = SelectedResourcePanel.ScaleTo(1, 200, Easing.SpringOut);
-        }
-#endif
+        // Selected panel animation removed (SelectedResourcePanel recreated elsewhere)
         
         // Update UI
         // Update selection visuals without rebuilding the whole panel to avoid image flicker
@@ -691,7 +1007,7 @@ public partial class LaboratoryPage : ContentPage
 
     /// <summary>
     /// Update selection/highlight visuals for resource items using the cached Border elements.
-    /// This avoids recreating the panel during a tap which caused the sprite to flicker.
+    /// Uses fade animation to switch between normal and highlighted 9-slice backgrounds.
     /// </summary>
     private void UpdateResourceItemSelectionVisuals()
     {
@@ -709,21 +1025,63 @@ public partial class LaboratoryPage : ContentPage
                 // Determine whether this item is selected
                 bool isSelected = _selectedResource != null && _selectedResource.Id == id;
 
-                if (isSelected)
-                {
-                    border.Stroke = Microsoft.Maui.Graphics.Colors.Gold;
-                    border.StrokeThickness = 2;
-                }
-                else
-                {
-                    border.Stroke = Microsoft.Maui.Graphics.Color.FromArgb("#4CAF50");
-                    border.StrokeThickness = 1;
-                }
+                // Use UserInterfaceCreator helper to animate selection state
+                UserInterfaceCreator.SetPanelItemSelected(border, isSelected, animate: true);
             }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateResourceItemSelectionVisuals error: {ex.Message}");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Replace the MachineLight visual with two preloaded Images (red/green) stacked
+    /// so we can cross-fade the light color without reloading images.
+    /// </summary>
+    private void SetupMachineLightImages(FurnitureObject light)
+    {
+#if ANDROID || WINDOWS
+        if (light == null || light.VisualElement == null)
+            return;
+
+        // If already created, ensure it shows red by default
+        if (_machineLightRedImage != null && _machineLightGreenImage != null)
+        {
+            _machineLightRedImage.Opacity = 1;
+            _machineLightGreenImage.Opacity = 0;
+            return;
+        }
+
+        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] SetupMachineLightImages called");
+        if (light.VisualElement is Grid grid)
+        {
+            grid.Children.Clear();
+
+            _machineLightRedImage = new Image
+            {
+                Source = "lab__machine_light_red.png",
+                Aspect = Aspect.Fill,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill,
+                Opacity = 1
+            };
+
+            _machineLightGreenImage = new Image
+            {
+                Source = "lab__machine_light_green.png",
+                Aspect = Aspect.Fill,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill,
+                Opacity = 0
+            };
+
+            grid.Children.Add(_machineLightRedImage);
+            grid.Children.Add(_machineLightGreenImage);
+
+            light.VisualElement = grid;
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Preloaded MachineLight red/green images added to grid");
         }
 #endif
     }
@@ -899,6 +1257,52 @@ public partial class LaboratoryPage : ContentPage
                 _displayOnImage.Opacity = on ? 1 : 0;
                 _displayOffImage.Opacity = on ? 0 : 1;
             }
+            
+            // Also update the MachineLight color (green when enough resources, red otherwise)
+            try
+            {
+                if (_machineLightRedImage != null && _machineLightGreenImage != null)
+                {
+                    if (on && _selectedResource != null)
+                    {
+                        int required = _selectedResource.AmountForExtraction ?? 0;
+                        bool hasEnough = _selectedResource.Quantity >= required;
+                        if (animate)
+                        {
+                            if (hasEnough)
+                            {
+                                _ = _machineLightGreenImage.FadeTo(1, 120, Easing.Linear);
+                                _ = _machineLightRedImage.FadeTo(0, 120, Easing.Linear);
+                            }
+                            else
+                            {
+                                _ = _machineLightGreenImage.FadeTo(0, 120, Easing.Linear);
+                                _ = _machineLightRedImage.FadeTo(1, 120, Easing.Linear);
+                            }
+                        }
+                        else
+                        {
+                            _machineLightGreenImage.Opacity = hasEnough ? 1 : 0;
+                            _machineLightRedImage.Opacity = hasEnough ? 0 : 1;
+                        }
+                    }
+                    else
+                    {
+                        // Always red when display is off or no selection
+                        if (animate)
+                        {
+                            _ = _machineLightGreenImage.FadeTo(0, 120, Easing.Linear);
+                            _ = _machineLightRedImage.FadeTo(1, 120, Easing.Linear);
+                        }
+                        else
+                        {
+                            _machineLightGreenImage.Opacity = 0;
+                            _machineLightRedImage.Opacity = 1;
+                        }
+                    }
+                }
+            }
+            catch { }
         }
         catch { }
 
@@ -929,20 +1333,65 @@ public partial class LaboratoryPage : ContentPage
 #endif
     }
     
-    // ============================================================================
-    // Selected Panel Visibility Updates
-    // ============================================================================
-    
-    private void UpdateSelectedResourcePanelVisibility()
+    // SelectedResourcePanel visibility/animation (dynamic Android panel)
+    private async Task UpdateSelectedResourcePanelVisibility(bool forceHide = false)
     {
 #if ANDROID
-        if (SelectedResourcePanel == null)
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateSelectedResourcePanelVisibility called. selectedResource={( _selectedResource?.Name ?? "null")}, forceHide={forceHide}");
+
+        if (_selectedResourcePanel == null)
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] _selectedResourcePanel is null");
             return;
-        
-        SelectedResourcePanel.IsVisible = _selectedResource != null && ResourceListContainer != null && ResourceListContainer.IsVisible;
-#elif WINDOWS
-        if (SelectedResourcePanel != null)
-            SelectedResourcePanel.IsVisible = false;
+        }
+
+        bool shouldShow = !forceHide && _selectedResource != null && ResourceListContainer != null && ResourceListContainer.IsVisible;
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] SelectedResourcePanel shouldShow={shouldShow}, currentIsVisible={_selectedResourcePanel.IsVisible}");
+
+        if (shouldShow)
+        {
+            // Ensure layout bounds are applied
+            AbsoluteLayout.SetLayoutBounds(_selectedResourcePanel, new Rect(1, 0.15, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+            AbsoluteLayout.SetLayoutFlags(_selectedResourcePanel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
+
+            // Bring to front by re-adding as last child
+            try
+            {
+                if (ResourceListWrapper != null)
+                {
+                    if (ResourceListWrapper.Children.Contains(_selectedResourcePanel))
+                    {
+                        ResourceListWrapper.Children.Remove(_selectedResourcePanel);
+                    }
+                    ResourceListWrapper.Children.Add(_selectedResourcePanel);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error re-adding SelectedResourcePanel: {ex.Message}");
+            }
+
+            _selectedResourcePanel.InputTransparent = false;
+            _selectedResourcePanel.IsVisible = true;
+            _selectedResourcePanel.AnchorX = 0.5;
+            _selectedResourcePanel.AnchorY = 0.5;
+            _selectedResourcePanel.Scale = 0;
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Showing SelectedResourcePanel and animating scale in");
+            try
+            {
+                await _selectedResourcePanel.ScaleTo(1, 200, Easing.SpringOut);
+            }
+            catch { }
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Hiding SelectedResourcePanel (if present)");
+            _selectedResourcePanel.InputTransparent = true;
+            try { await _selectedResourcePanel.ScaleTo(0, 150, Easing.SpringIn); } catch { }
+            _selectedResourcePanel.IsVisible = false;
+        }
+#else
+        await Task.CompletedTask;
 #endif
     }
     
@@ -1055,6 +1504,7 @@ public partial class LaboratoryPage : ContentPage
         var token = _displayAnimationCts.Token;
 
         var display = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplay");
+        var button = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayButton");
         if (display == null || display.VisualElement == null)
             return;
 
@@ -1065,18 +1515,44 @@ public partial class LaboratoryPage : ContentPage
         
         // Notify listeners animation started (disable all items)
         DisplayAnimationStarted?.Invoke(this, EventArgs.Empty);
+
+        // Ensure ExtractButton is not interactable at animation start (will be enabled only after full slide)
+        var extractStationInit = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+        if (extractStationInit != null)
+        {
+            extractStationInit.CanInteract = false;
+            if (extractStationInit.VisualElement is View evInit)
+                evInit.InputTransparent = true;
+        }
         
         try
         {
             if (_selectedResource != null)
             {
-                // Slide out to reveal at X=480 (translation -> 0)
+                // Step 1: Slide display out to reveal at X=480 (translation -> 0)
+                // Button is invisible at X=480 Y=0
+                if (button?.VisualElement != null)
+                {
+                    button.VisualElement.IsVisible = false;
+                    button.VisualElement.TranslationX = 0;
+                    button.VisualElement.TranslationY = 0;
+                }
+                
                 _isDisplaySliding = true;
                 System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding display out to visible (TranslateTo 0)");
                 await display.VisualElement.TranslateTo(0, 0, 600, Easing.CubicInOut);
                 _isDisplaySliding = false;
 
-                // Slide finished -> notify listeners (re-enable items)
+                // Step 2: Display has slid out. Begin delay before SetDisplayOn
+                // Step 3: During delay, make button visible (but don't move yet)
+                if (button?.VisualElement != null)
+                {
+                    button.VisualElement.IsVisible = true;
+                    System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Button made visible during delay");
+                    // Do NOT enable ExtractButton yet — enable only after the button finishes sliding down.
+                }
+
+                // Re-enable items briefly during delay (step 3 allows selection)
                 DisplayAnimationEnded?.Invoke(this, EventArgs.Empty);
 
                 // Wait up to 1s but allow cancellation when selection changes
@@ -1089,6 +1565,13 @@ public partial class LaboratoryPage : ContentPage
                     // If cancelled and selection cleared, immediately slide back in
                     if (_selectedResource == null)
                     {
+                        // Hide button before reversing
+                        if (button?.VisualElement != null)
+                        {
+                            button.VisualElement.IsVisible = false;
+                            button.VisualElement.TranslationY = 0;
+                        }
+                        
                         // Immediately set display image to off when sliding back starts
                         SetDisplayOn(false, animate: false);
 
@@ -1103,15 +1586,76 @@ public partial class LaboratoryPage : ContentPage
                     return;
                 }
 
-                // After delay, if selection still present, switch sprite on
+                // Step 4: After delay, if selection still present, switch sprite on
                 if (_selectedResource != null)
                 {
+                    // Disable items again before SetDisplayOn animation
+                    DisplayAnimationStarted?.Invoke(this, EventArgs.Empty);
+                    
                     // Switch to "on" visual using preloaded images
                     SetDisplayOn(true, animate: true);
+                    
+                    // Wait for SetDisplayOn fade to complete (120ms)
+                    await Task.Delay(150);
+                    
+                    // Step 5: Check if we have enough resources
+                    int required = _selectedResource.AmountForExtraction ?? 0;
+                    bool hasEnough = _selectedResource.Quantity >= required;
+                    
+                        if (hasEnough && button?.VisualElement != null)
+                    {
+                        // Step 6: Slide button down to Y=240 (positive moves downward in this layout)
+                        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding button down (hasEnough=true)");
+                        await button.VisualElement.TranslateTo(0, 240, 300, Easing.CubicOut);
+                        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Button animation complete");
+
+                        // Now that the button is fully extended, make ExtractButton interactable
+                        var extractEnable = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+                        if (extractEnable != null)
+                        {
+                            extractEnable.CanInteract = true;
+                            if (extractEnable.VisualElement is View ev2)
+                                ev2.InputTransparent = false;
+                        }
+                    }
+                    else
+                    {
+                        // Not enough resources: hide button, animation ends here
+                        if (button?.VisualElement != null)
+                        {
+                            button.VisualElement.IsVisible = false;
+                            button.VisualElement.TranslationY = 0;
+                        }
+                        // Disable ExtractButton when button hidden or not enough resources
+                        var extractDisable = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+                        if (extractDisable != null)
+                        {
+                            extractDisable.CanInteract = false;
+                            if (extractDisable.VisualElement is View evd)
+                                evd.InputTransparent = true;
+                        }
+                        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Not enough resources, re-enabling items");
+                    }
+                    
+                    // Re-enable items after button animation completes (or immediately if not shown)
+                    DisplayAnimationEnded?.Invoke(this, EventArgs.Empty);
                 }
                 else
                 {
                     // Otherwise, set image off immediately and slide back; notify end after slide completes
+                    if (button?.VisualElement != null)
+                    {
+                        button.VisualElement.IsVisible = false;
+                        button.VisualElement.TranslationY = 0;
+                    }
+                    var extractHide = _stationObjects.FirstOrDefault(s => s.Id == "ExtractButton");
+                    if (extractHide != null)
+                    {
+                        extractHide.CanInteract = false;
+                        if (extractHide.VisualElement is View evh)
+                            evh.InputTransparent = true;
+                    }
+                    
                     SetDisplayOn(false, animate: false);
 
                     _isDisplaySliding = true;
@@ -1124,11 +1668,30 @@ public partial class LaboratoryPage : ContentPage
             }
             else
             {
-                // Slide back to hidden position (translation -> -480)
-                // Immediately set display image to off when sliding back starts
-                SetDisplayOn(false, animate: false);
-
+                // Reverse animation: deselection
+                // Step 1 (reverse): If button is shown and slid down, slide it back up first
+                if (button?.VisualElement != null && button.VisualElement.IsVisible && button.VisualElement.TranslationY > 10)
+                {
+                    System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding button back up before hiding display");
+                    await button.VisualElement.TranslateTo(0, 0, 300, Easing.CubicIn);
+                    button.VisualElement.IsVisible = false;
+                }
+                else if (button?.VisualElement != null)
+                {
+                    // Button not shown or not slid down, just hide it
+                    button.VisualElement.IsVisible = false;
+                    button.VisualElement.TranslationY = 0;
+                }
+                
+                // Step 2 (reverse): SetDisplayOn(false)
+                SetDisplayOn(false, animate: true);
+                
+                // Wait for SetDisplayOn fade to complete
+                await Task.Delay(150);
+                
+                // Step 3 (reverse): Slide display back to hidden position (translation -> -480)
                 _isDisplaySliding = true;
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Sliding display back to hidden (TranslateTo -480)");
                 await display.VisualElement.TranslateTo(-480, 0, 400, Easing.CubicInOut);
                 _isDisplaySliding = false;
 

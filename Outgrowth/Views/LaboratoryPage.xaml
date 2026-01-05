@@ -129,34 +129,7 @@
             </Border>
             </Grid>
             
-            <!-- Selected Resource Info Panel (small, above main panel) - Must be after ResourceListContainer to appear on top -->
-            <Grid x:Name="SelectedResourcePanel"
-                  AbsoluteLayout.LayoutBounds="1,0.15,AutoSize,AutoSize"
-                  AbsoluteLayout.LayoutFlags="XProportional,YProportional"
-                  WidthRequest="250"
-                  HeightRequest="160"
-                  Margin="0,0,20,0"
-                  IsVisible="False"
-                  InputTransparent="True">
-                <Border StrokeThickness="2"
-                        Stroke="#FFD700"
-                        BackgroundColor="#1A1A1A"
-                        Padding="10"
-                        HorizontalOptions="Fill"
-                        VerticalOptions="Fill">
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="8"/>
-                    </Border.StrokeShape>
-                          <Label
-                              Text="{Binding SelectedResourceName}"
-                              FontSize="{DynamicResource ResourcePanelBodySize}"
-                              FontFamily="{DynamicResource ResourcePanelBodyFont}"
-                              FontAttributes="Bold"
-                              TextColor="White"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"/>
-                </Border>
-            </Grid>
+            <!-- SelectedResourcePanel removed: recreated differently later -->
         </AbsoluteLayout>
         
         <!-- Fade Overlay for Android Navigation Transitions -->
