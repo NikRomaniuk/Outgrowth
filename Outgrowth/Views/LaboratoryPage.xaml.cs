@@ -14,6 +14,8 @@ namespace Outgrowth.Views;
 
 public partial class LaboratoryPage : ContentPage
 {
+    private ScreenProperties screenProps = ScreenProperties.Instance;
+    
     // Station objects - created dynamically on page load
     private readonly List<StationObject> _stationObjects = new()
     {
@@ -36,21 +38,35 @@ public partial class LaboratoryPage : ContentPage
     // Selected resource for interaction
     private ResourceData? _selectedResource;
     
-    // Animation lock to prevent opening other panels during animation
-    private bool _isAnimating = false;
+    // Per-panel animation tracking to allow multiple panels to animate concurrently
+    private readonly System.Collections.Generic.HashSet<StyledPanel> _animatingPanels = new();
+    
     // Lock for machine display animation
     private bool _isDisplayAnimating = false;
     // Indicates the translate (slide) phase of the display animation is running
     private bool _isDisplaySliding = false;
     // Cancellation token for display animation delay to allow interruption
     private CancellationTokenSource? _displayAnimationCts;
-    // Cache for resource panel items to enable/disable during animation
-    private Dictionary<string, Border> _resourceItemCache = new();
-    // 9-Slice panel container and its content scroll view
-    private Grid? _nineSlicePanelContainer;
-    private ScrollView? _panelContentScroll;
-    // Dynamically created SelectedResourcePanel (Android only)
-    private VisualElement? _selectedResourcePanel;
+    
+    // Track whether dynamic panels have been created to avoid duplicate creation
+    private bool _panelsCreated = false;
+    
+    // Cache for resource panel items to avoid full recreation when only selection changes
+    private List<StyledPanel>? _resourcePanelItems;
+    
+    // --- Dynamically created Panels ---
+    private StyledPanel? _resourcePanel;
+    private AbsoluteLayout? _resourcePanelWrapper;
+    
+    // SelectedResourcePanel (Android only)
+#if ANDROID
+    private StyledPanel? _selectedResourcePanel;
+    private Border? _selectedResourcePanelWrapper;
+#endif
+    
+    // Navigation buttons (left gutter)
+    private StyledPanel? _hubButton;
+    private AbsoluteLayout? _hubButtonWrapper;
     
     // Events for display animation lifecycle
     public event EventHandler? DisplayAnimationStarted;
@@ -161,39 +177,385 @@ public partial class LaboratoryPage : ContentPage
         DisplayAnimationStarted += OnDisplayAnimationStarted;
         DisplayAnimationEnded += OnDisplayAnimationEnded;
         
-        // Create dynamic resource panel from library
-        UpdateResourcePanel();
-        
-        // Initialize panel scale for animation (set to 0 if not visible, 1 if visible)
-        if (ResourceListContainer != null)
+        // Initialize screen properties and font sizes
+        var screenProps = ScreenProperties.Instance;
+        if (this.Width > 0 && this.Height > 0)
         {
-            ResourceListContainer.AnchorX = 0.5;
-            ResourceListContainer.AnchorY = 0.5;
-            ResourceListContainer.Scale = ResourceListContainer.IsVisible ? 1 : 0;
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] OnPageLoaded: Page size available ({this.Width}x{this.Height}), creating panels immediately");
+            screenProps.UpdateScreenProperties(this.Width, this.Height);
+            screenProps.UpdateFontSizes(screenProps.AdaptiveScale);
+            
+            // Scale and position EnvironmentWrapper
+            if (EnvironmentWrapper != null && EnvironmentContainer != null)
+            {
+                EnvironmentContainer.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentContainer.HeightRequest = ScreenProperties.ReferenceHeight;
+                
+                EnvironmentWrapper.AnchorX = 0.5;
+                EnvironmentWrapper.AnchorY = 0.5;
+                if (EnvironmentWrapper.Handler != null)
+                {
+                    try { EnvironmentWrapper.Scale = screenProps.Scale; }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Scale exception: {ex.Message}"); }
+                }
+                EnvironmentWrapper.WidthRequest = ScreenProperties.ReferenceWidth;
+                EnvironmentWrapper.HeightRequest = ScreenProperties.ReferenceHeight;
+                
+                EnvironmentContainer.InputTransparent = false;
+                EnvironmentContainer.BackgroundColor = Colors.Transparent;
+                
+                EnvironmentWrapper.TranslationX = screenProps.OffsetX;
+                EnvironmentWrapper.TranslationY = screenProps.OffsetY;
+            }
+            
+            CreateDynamicPanels();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] OnPageLoaded: Page size not available, deferring panel creation to SizeChanged");
         }
         
-        // SelectedResourcePanel removed from XAML; will be created dynamically on Android inside UpdateResourcePanel
-        
 #if WINDOWS
-        // Attach Windows keyboard input handler (only Esc for closing panels)
+        // Attach Windows keyboard input handler (Esc for closing panels, E for hub navigation)
         _windowsInput = new WindowsInput(
             onLeftArrow: () => { }, // No action
             onRightArrow: () => { }, // No action
-            onEscape: () => _ = CloseResourcePanelWithAnimation()  // Close panel with Esc key (with animation)
+            onEscape: FireAndForgetCloseAllPanels,  // Close panels with Esc key
+            onQ: () => OnHubClicked(this, EventArgs.Empty)
         );
         _windowsInput.Attach();
 #endif
     }
     
+    /// <summary>
+    /// Creates all dynamic UI panels (resource panel, navigation buttons).
+    /// Called after valid screen dimensions are available.
+    /// </summary>
+    private void CreateDynamicPanels()
+    {
+        if (_panelsCreated)
+        {
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] CreateDynamicPanels: Panels already created, skipping");
+            return;
+        }
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] CreateDynamicPanels: Creating panels with scale {screenProps.AdaptiveScale}");
+        
+        CreateResourcePanel();
+        CreateNavigationButtons();
+        _panelsCreated = true;
+    }
+
+    // -=-=- PANELS -=-=-
+    
+    private void CreateResourcePanel()
+    {
+        try
+        {
+            var resources = ResourceLibrary.GetAllResources().ToList();
+            var adaptive = screenProps.AdaptiveScale;
+#if ANDROID
+            const double baseWidth = 250.0;
+            const double baseHeight = 500.0;
+#else
+            const double baseWidth = 300.0;
+            const double baseHeight = 500.0;
+#endif
+            double panelWidth = baseWidth * adaptive;
+            double panelHeight = baseHeight * adaptive;
+            double cornerSize = 40 * adaptive;
+
+            _resourcePanelWrapper = new AbsoluteLayout
+            {
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Fill,
+                Margin = new Thickness(0, 0, 20, 0),
+                ZIndex = 1000
+            };
+            MainGrid.SetColumn(_resourcePanelWrapper, 2);
+            if (!MainGrid.Children.Contains(_resourcePanelWrapper))
+                MainGrid.Children.Add(_resourcePanelWrapper);
+
+            _resourcePanel = new StyledPanel(
+                type: "scroll",
+                width: panelWidth,
+                height: panelHeight,
+                cornerSize: cornerSize,
+                backgroundColor: Color.FromArgb("#0f0c29"),
+                borderColor: Color.FromArgb("#302b63"),
+                cornerImage: "ui__panel_corner.png",
+                horizontalEdgeImage: "ui__panel_edge_horizontal.png",
+                verticalEdgeImage: "ui__panel_edge_vertical.png",
+                centerImage: "ui__panel_center.png"
+            );
+
+            if (_resourcePanelWrapper != null)
+            {
+                _resourcePanelWrapper.Children.Clear();
+                _resourcePanelWrapper.Children.Add(_resourcePanel.Panel);
+#if ANDROID
+                AbsoluteLayout.SetLayoutBounds(_resourcePanel.Panel, new Rect(0, 0.75, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#else
+                AbsoluteLayout.SetLayoutBounds(_resourcePanel.Panel, new Rect(0, 0.5, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#endif
+                AbsoluteLayout.SetLayoutFlags(_resourcePanel.Panel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
+                _resourcePanel.Panel.AnchorX = 0.5;
+                _resourcePanel.Panel.AnchorY = 0.5;
+                _resourcePanel.Panel.Scale = 0;
+                _resourcePanel.Panel.IsVisible = false;
+                _resourcePanel.Panel.InputTransparent = true;
+            }
+
+#if ANDROID
+            // Create SelectedResourcePanel
+            try
+            {
+                double selectedPanelWidth = baseWidth * adaptive;
+                double selectedPanelHeight = 160.0 * adaptive;
+
+                // Create Label for selected resource name
+                var selectedLabel = new Label
+                {
+                    HorizontalOptions = LayoutOptions.Center,
+                    VerticalOptions = LayoutOptions.Center,
+                    TextColor = Colors.White
+                };
+                if (BindingContext != null)
+                {
+                    selectedLabel.BindingContext = BindingContext;
+                    selectedLabel.SetBinding(Label.TextProperty, new Binding("SelectedResourceName"));
+                }
+                try { selectedLabel.FontFamily = "SilkscreenBold"; } catch { }
+
+                _selectedResourcePanel = new StyledPanel(
+                    width: selectedPanelWidth,
+                    height: selectedPanelHeight,
+                    cornerSize: cornerSize,
+                    backgroundColor: Color.FromArgb("#2874a7"),
+                    borderColor: Color.FromArgb("#00d2ff"),
+                    content: selectedLabel,
+                    cornerImage: "ui__panel_highlighted_corner.png",
+                    horizontalEdgeImage: "ui__panel_highlighted_edge_horizontal.png",
+                    verticalEdgeImage: "ui__panel_highlighted_edge_vertical.png",
+                    centerImage: "ui__panel_highlighted_center.png"
+                );
+                _selectedResourcePanelWrapper = new Border
+                {
+                    Content = _selectedResourcePanel.Panel,
+                    Stroke = null,
+                    StrokeThickness = 0
+                };
+
+                AbsoluteLayout.SetLayoutBounds(_selectedResourcePanelWrapper, new Rect(0, 0.15, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+                AbsoluteLayout.SetLayoutFlags(_selectedResourcePanelWrapper, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
+                _selectedResourcePanelWrapper.AnchorX = 0.5;
+                _selectedResourcePanelWrapper.AnchorY = 0.5;
+                _selectedResourcePanelWrapper.Scale = 0;
+                _selectedResourcePanelWrapper.IsVisible = false;
+                _selectedResourcePanelWrapper.InputTransparent = true;
+                _selectedResourcePanelWrapper.ZIndex = 1005;
+                _resourcePanelWrapper?.Children.Add(_selectedResourcePanelWrapper);
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Created SelectedResourcePanel");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error creating SelectedResourcePanel: {ex.Message}");
+            }
+#endif
+
+            var contentStack = _resourcePanel.ScrollContainer?.Content as VerticalStackLayout;
+            if (contentStack == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] CreateResourcePanel: No content stack available");
+                return;
+            }
+            
+            // Create all Resource Panel Items
+            contentStack.Children.Clear();
+
+            _resourcePanelItems = new List<StyledPanel>();
+            _resourcePanelItems.Clear();
+            foreach (var resource in resources)
+            {
+                var resourceItem = CreateResourceItem(resource);
+                resourceItem.ClassId = resource.Id;
+                
+                // Manually add TapGestureRecognizer since onTapped parameter doesn't work for panelItems
+                var tap = new TapGestureRecognizer();
+                tap.Tapped += async (s, e) => await OnResourceSelected(resource);
+                resourceItem.Panel.GestureRecognizers.Add(tap);
+                
+                _resourcePanelItems.Add(resourceItem);
+                contentStack.Children.Add(resourceItem.Panel);
+            }
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Created {_resourcePanelItems.Count} ResourcePanel items");
+            
+            // Update panel items to set initial enabled/disabled state
+            UpdateResourcePanel();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error creating ResourcePanel: {ex.Message}");
+            _resourcePanelItems = null;
+        }
+    }
+    private void CreateNavigationButtons()
+    {
+        try
+        {
+            var adaptive = screenProps.AdaptiveScale;
+
+#if ANDROID
+            const double baseWidth = 200.0;
+            const double baseHeight = 200.0;
+#else
+            const double baseWidth = 200.0;
+            const double baseHeight = 200.0;
+#endif
+            double buttonWidth = baseWidth * adaptive;
+            double buttonHeight = baseHeight * adaptive;
+            double cornerSize = 40 * adaptive;
+
+            _hubButtonWrapper = new AbsoluteLayout
+            {
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.Fill,
+                Margin = new Thickness(20, 0, 0, 0),
+                ZIndex = 1000
+            };
+
+
+            MainGrid.SetColumn(_hubButtonWrapper, 0);
+            if (!MainGrid.Children.Contains(_hubButtonWrapper))
+                MainGrid.Children.Add(_hubButtonWrapper);
+
+            // Create Hub button using StyledPanel selection constructor
+            _hubButton = new StyledPanel(
+                type: "selection",
+                width: buttonWidth,
+                height: buttonHeight,
+                isSelected: false,
+                cornerSize: cornerSize,
+                cornerImage: "ui__panel_item_corner.png",
+                horizontalEdgeImage: "ui__panel_item_edge_horizontal.png",
+                verticalEdgeImage: "ui__panel_item_edge_vertical.png",
+                centerImage: "ui__panel_item_center.png"
+            );
+
+            // Create icon for Hub button
+            var hubIcon = new Image
+            {
+                Source = "ui__icon_hub.png", // Replace with actual hub icon if available
+                Aspect = Aspect.AspectFit,
+                WidthRequest = buttonHeight * 0.7,
+                HeightRequest = buttonHeight * 0.7,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center
+            };
+
+            if (_hubButton.ContentGrid != null)
+            {
+#if WINDOWS
+                // Configure ContentGrid to be 2x2 on Windows
+                var cg = _hubButton.ContentGrid;
+                cg.Children.Clear();
+                cg.ColumnDefinitions = new ColumnDefinitionCollection
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Star }
+                };
+                cg.RowDefinitions = new RowDefinitionCollection
+                {
+                    new RowDefinition { Height = GridLength.Star },
+                    new RowDefinition { Height = GridLength.Star }
+                };
+
+                // Place hubIcon to span both rows and columns
+                Grid.SetRow(hubIcon, 0);
+                Grid.SetColumn(hubIcon, 0);
+                Grid.SetRowSpan(hubIcon, 2);
+                Grid.SetColumnSpan(hubIcon, 2);
+                hubIcon.ZIndex = 0;
+                cg.Children.Add(hubIcon);
+
+                // Tooltip label at row=2,col=2 (1,1 zero-based) with higher ZIndex
+                var tooltipLabel = new Label
+                {
+                    Text = "Q",
+                    HorizontalOptions = LayoutOptions.Center,
+                    VerticalOptions = LayoutOptions.Center
+                };
+                try
+                {
+                    var appRes = Application.Current?.Resources;
+                    if (appRes != null && appRes.ContainsKey("ResourcePanelBodyFont"))
+                        tooltipLabel.FontFamily = (string)appRes["ResourcePanelBodyFont"];
+                    else if (Resources != null && Resources.ContainsKey("ResourcePanelBodyFont"))
+                        tooltipLabel.FontFamily = (string)Resources["ResourcePanelBodyFont"];
+                }
+                catch { }
+                tooltipLabel.FontSize = 50 * adaptive;
+                Grid.SetRow(tooltipLabel, 1);
+                Grid.SetColumn(tooltipLabel, 1);
+                tooltipLabel.ZIndex = 1;
+                cg.Children.Add(tooltipLabel);
+#else
+                _hubButton.ContentGrid.Children.Add(hubIcon);
+#endif
+            }
+
+            // Position button
+            _hubButtonWrapper.Children.Add(_hubButton.Panel);
+#if WINDOWS
+            AbsoluteLayout.SetLayoutBounds(_hubButton.Panel, new Rect(0, 0.97, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#else
+            AbsoluteLayout.SetLayoutBounds(_hubButton.Panel, new Rect(0, 0.925, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#endif
+            AbsoluteLayout.SetLayoutFlags(_hubButton.Panel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
+            _hubButton.Panel.AnchorX = 0.5;
+            _hubButton.Panel.AnchorY = 0.5;
+            _hubButton.Panel.IsVisible = true;
+            _hubButton.Panel.InputTransparent = false;
+            
+            // Ensure wrapper is interactive
+            _hubButtonWrapper.InputTransparent = false;
+            _hubButtonWrapper.IsVisible = true;
+
+            // Attach tap gesture to Panel (skip on Windows — handled by keyboard 'E')
+#if !WINDOWS
+            var tap = new TapGestureRecognizer();
+            tap.Tapped += (s, e) => OnHubClicked(s ?? this, EventArgs.Empty);
+            _hubButton.Panel.GestureRecognizers.Add(tap);
+#endif
+
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Created navigation buttons dynamically");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Failed to create navigation buttons: {ex.Message}");
+        }
+    }
+    
     private void OnPageDisappearing(object? sender, EventArgs e)
     {
-        // Unsubscribe from timer events
-        // Timer.Tick -= OnTimerTick;
+        // Cancel any ongoing display animation
+        _displayAnimationCts?.Cancel();
+        _displayAnimationCts?.Dispose();
+        _displayAnimationCts = null;
         
-        // Reset animation flag to allow closing (page is disappearing)
-        _isAnimating = false;
-        // Close panel immediately without animation
-        CloseResourcePanel();
+        // Close all panels immediately without animation
+        _animatingPanels.Clear();
+        if (_resourcePanel != null && _resourcePanel.Panel.IsVisible)
+        {
+            _resourcePanel.Panel.IsVisible = false;
+            _resourcePanel.Panel.Scale = 0;
+            _resourcePanel.Panel.InputTransparent = true;
+        }
+#if ANDROID
+        if (_selectedResourcePanel != null && _selectedResourcePanel.Panel.IsVisible)
+        {
+            _selectedResourcePanel.Panel.IsVisible = false;
+        }
+#endif
 
         // Leaving the page is allowed to clear selection regardless of slide state
         _selectedResource = null;
@@ -206,6 +568,7 @@ public partial class LaboratoryPage : ContentPage
         // Clean up dynamically created elements to prevent memory leaks
         CleanupStationObjects();
         CleanupFurnitureObjects();
+        CleanupDynamicPanels();
         
 #if WINDOWS
         // Detach Windows keyboard input handler
@@ -213,6 +576,51 @@ public partial class LaboratoryPage : ContentPage
         _windowsInput = null;
 #endif
     }
+    
+    
+    private void CleanupDynamicPanels()
+    {
+        try
+        {
+            // Remove resource panel wrapper from MainGrid
+            if (_resourcePanelWrapper != null && MainGrid.Children.Contains(_resourcePanelWrapper))
+            {
+                MainGrid.Children.Remove(_resourcePanelWrapper);
+            }
+            
+            // Remove hub button wrapper from MainGrid
+            if (_hubButtonWrapper != null && MainGrid.Children.Contains(_hubButtonWrapper))
+            {
+                MainGrid.Children.Remove(_hubButtonWrapper);
+            }
+            
+            // Clear panel item caches
+            _resourcePanelItems?.Clear();
+            
+            // Reset panel creation flag
+            _panelsCreated = false;
+            
+            // Nullify all panel references
+            _resourcePanel = null;
+            _resourcePanelWrapper = null;
+            _resourcePanelItems = null;
+            _hubButton = null;
+            _hubButtonWrapper = null;
+            
+#if ANDROID
+            _selectedResourcePanel = null;
+            _selectedResourcePanelWrapper = null;
+#endif
+            
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Cleaned up all dynamic panels");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error cleaning up dynamic panels: {ex.Message}");
+        }
+    }
+
+    // -=-=- STATION OBJECTS -=-=-
     
     /// <summary>
     /// Cleans up station objects and their visual elements to prevent memory leaks
@@ -239,6 +647,8 @@ public partial class LaboratoryPage : ContentPage
         }
 #endif
     }
+
+    // -=-=- FURNITURE OBJECTS -=-=-
     
     /// <summary>
     /// Creates furniture object UI elements and adds them to EnvironmentContainer
@@ -310,8 +720,7 @@ public partial class LaboratoryPage : ContentPage
     private void OnPageSizeChanged(object? sender, EventArgs e)
     {
 #if ANDROID || WINDOWS
-        if (EnvironmentWrapper != null && EnvironmentContainer != null && HubButton != null 
-            && ResourceListContainer != null && ResourceListPlaceholder != null && ResourceListWrapper != null)
+        if (EnvironmentWrapper != null && EnvironmentContainer != null)
         {
             var pageHeight = this.Height;
             var pageWidth = this.Width;
@@ -339,26 +748,19 @@ public partial class LaboratoryPage : ContentPage
                 EnvironmentWrapper.TranslationX = screenProps.OffsetX;
                 EnvironmentWrapper.TranslationY = screenProps.OffsetY;
                 
-                // Scale HubButton from left edge (matches environment scale)
-                HubButton.AnchorX = 0;
-                HubButton.AnchorY = 1;
-                HubButton.Scale = screenProps.Scale;
-                
-                // Scale placeholder from right edge (maintains column width, prevents offset)
-                ResourceListPlaceholder.AnchorX = 1;
-                ResourceListPlaceholder.AnchorY = 0.5;
-                ResourceListPlaceholder.Scale = screenProps.Scale;
-                
                 // Update station object positions from absolute coordinates
                 UpdateStationPositions();
                 UpdateFurniturePositions();
                 
                 var adaptive = screenProps.AdaptiveScale;
                 screenProps.UpdateFontSizes(adaptive);
-                UpdatePanelSize(adaptive);
                 
-                // Update resource panel to refresh font sizes for dynamically created items
-                UpdateResourcePanel();
+                // Create panels if not already created
+                if (!_panelsCreated)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] OnPageSizeChanged: Creating panels with dimensions {pageWidth}x{pageHeight}");
+                    CreateDynamicPanels();
+                }
             }
         }
 #endif
@@ -366,42 +768,7 @@ public partial class LaboratoryPage : ContentPage
     
     private void UpdatePanelSize(double adaptiveScale)
     {
-        // Use UserInterfaceCreator for generic panel sizing
-        const double baseHeight = 500.0;
-        const double baseMargin = 20.0;
-        const double selectedPanelHeight = 160.0;
-
-    #if ANDROID
-        const double baseWidth = 250.0;
-        const double selectedPanelWidth = 250.0;
-        bool isAndroid = true;
-    #else
-        const double baseWidth = 300.0;
-        const double selectedPanelWidth = 300.0;
-        bool isAndroid = false;
-    #endif
-
-        var sizes = UserInterfaceCreator.GetPanelSizes(adaptiveScale, baseWidth, baseHeight, baseMargin, selectedPanelWidth, selectedPanelHeight, isAndroid);
-
-        if (ResourceListContainer != null)
-        {
-            ResourceListContainer.WidthRequest = sizes.Width;
-            ResourceListContainer.HeightRequest = sizes.Height;
-            ResourceListContainer.Margin = new Thickness(0, 0, sizes.Margin, 0);
-        }
-
-        if (ResourceListWrapper != null && ResourceListContainer != null)
-        {
-            AbsoluteLayout.SetLayoutBounds(ResourceListContainer, new Rect(1, sizes.PanelYPosition, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-            AbsoluteLayout.SetLayoutFlags(ResourceListContainer, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
-        }
-
-        // Placeholder scales with buttonScale (layout sizing, maintains column width)
-        ResourceListPlaceholder.WidthRequest = 300.0;
-        ResourceListPlaceholder.HeightRequest = baseHeight;
-        ResourceListPlaceholder.Margin = new Thickness(0, 0, baseMargin, 0);
-
-        // SelectedResourcePanel removed; selected-panel sizing handled elsewhere when recreated
+        
     }
 
     /// <summary>
@@ -445,35 +812,62 @@ public partial class LaboratoryPage : ContentPage
     // Navigation & Panel Controls
     // ============================================================================
     
-    private async void OnHubClicked(object sender, EventArgs e)
+    private async void OnHubClicked(object? sender, EventArgs e)
     {
         await NavigationService.NavigateWithFadeAsync("//HubPage");
     }
     
     private async void OnResourceSlotClicked(object sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
-        if (ResourceListContainer == null || _isAnimating)
+        if (_resourcePanel == null)
             return;
-        
+
+        try
+        {
+            if (_animatingPanels.Count > 0)
+                return; // Ignore clicks during animations
+            
+            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] OnResourceSlotClicked called");
+            
+            // Toggle seeds panel
+            if (!_resourcePanel.Panel.IsVisible)
+            {
+                // Open resource panel
 #if ANDROID
-        // On Android, toggle panel visibility (close if open, open if closed)
-        if (ResourceListContainer.IsVisible)
-        {
-            await CloseResourcePanelWithAnimation();
-        }
-        else
-        {
-            await OpenResourcePanelWithAnimation();
-        }
+                if (_selectedResource == null)
+                {
+                    await OpenPanel(true, _resourcePanel);
+                }
+                else
+                {
+                    await Task.WhenAll(
+                    OpenPanel(true, _resourcePanel),
+                    OpenPanel(true, _selectedResourcePanel)
+                    );
+                }
 #else
-        // On Windows, always open panel (close with Esc key)
-        if (!ResourceListContainer.IsVisible)
-        {
-            await OpenResourcePanelWithAnimation();
+                await OpenPanel(true, _resourcePanel);
+#endif
+            }
+            else
+            {
+                // Close resource panel with animation
+#if ANDROID
+                await Task.WhenAll(
+                ClosePanel(true, _resourcePanel),
+                ClosePanel(true, _selectedResourcePanel)
+                );
+#else
+                await ClosePanel(true, _resourcePanel);
+#endif
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Resource panel toggled");
         }
-#endif
-#endif
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Exception in OnResourceSlotClicked: {ex.Message}");
+        }
     }
 
     private async void OnExtractClicked(object? sender, EventArgs e)
@@ -534,13 +928,42 @@ public partial class LaboratoryPage : ContentPage
             // Persist current material quantities
             GameDataManager.SaveMaterialsState();
 
-            // Do not disable the resource panel item (avoid recreating UI);
-            // instead check whether we still have enough for another extraction.
+            // Check whether we still have enough for another extraction
             bool hasEnough = _selectedResource.Quantity >= required;
 
             // If not enough for another extraction, slide the MachineDisplayButton back and set light to red
             if (!hasEnough)
             {
+                if (_selectedResource.Quantity <= 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Deselecting resource {_selectedResource.Name}");
+                    
+                    // Animate deselection on the panel item
+                    if (_resourcePanelItems != null)
+                    {
+                        var panel = _resourcePanelItems.FirstOrDefault(p => p.ClassId == _selectedResource.Id);
+                        if (panel != null)
+                            panel.SetPanelSelected(false, animate: true);
+                    }
+
+                    _selectedResource = null;
+            
+                    // Update selected name via ViewModel binding
+                    var gvm = BindingContext as LaboratoryViewModel;
+                    if (gvm != null)
+                        gvm.SelectedResourceName = string.Empty;
+
+                    UpdateResourcePanel();
+                    UpdateMachineContentVisual();
+                    _ = AnimateMachineDisplayForSelection();
+                    
+                    // Update dynamic selected panel visibility (Android)
+#if ANDROID
+                    await ClosePanel(true, _selectedResourcePanel);
+#endif
+                    return;
+                }
+
                 var buttonFurniture = _furnitureObjects.FirstOrDefault(f => f.Id == "MachineDisplayButton");
                 var buttonView = buttonFurniture?.VisualElement;
                 try
@@ -588,9 +1011,6 @@ public partial class LaboratoryPage : ContentPage
                         ev.InputTransparent = false;
                 }
             }
-
-            // Refresh lightweight visuals (selection stroke) only
-            UpdateResourceItemSelectionVisuals();
         }
         catch (Exception ex)
         {
@@ -604,436 +1024,259 @@ public partial class LaboratoryPage : ContentPage
     // ============================================================================
     // Panel Animation Methods
     // ============================================================================
-    
-    private async Task OpenResourcePanelWithAnimation()
-    {
-#if ANDROID || WINDOWS
-        if (ResourceListContainer == null || _isAnimating)
-            return;
-        
-        _isAnimating = true;
-        
-        // Prepare main panel for animation
-        ResourceListContainer.AnchorX = 0.5;
-        ResourceListContainer.AnchorY = 0.5;
-        ResourceListContainer.Scale = 0;
-        ResourceListContainer.IsVisible = true;
-        ResourceListContainer.InputTransparent = false;
-        
-        // No separate selected panel animation here (SelectedResourcePanel removed)
-        
-        // Animate panels opening in parallel (main + selected panel)
-        var mainPanelTask = ResourceListContainer.ScaleTo(1, 200, Easing.SpringOut);
-    #if ANDROID
-        var selectedTask = UpdateSelectedResourcePanelVisibility(forceHide: false);
-        await Task.WhenAll(mainPanelTask, selectedTask);
-    #else
-        await mainPanelTask;
-    #endif
 
-        _isAnimating = false;
-#else
-        await Task.CompletedTask;
-#endif
-    }
-    
-    private async Task CloseResourcePanelWithAnimation()
+    private async Task OpenPanel(bool animate = true, StyledPanel? panel = null)
     {
-#if ANDROID || WINDOWS
-        if (ResourceListContainer == null || !ResourceListContainer.IsVisible || _isAnimating)
+        if (panel == null)
             return;
-        
-        _isAnimating = true;
-        
-        // No selected panel closing animation (SelectedResourcePanel removed)
-        
-        // Animate main panel closing and selected panel hiding in parallel
-    #if ANDROID
-        var mainPanelTask = ResourceListContainer.ScaleTo(0, 200, Easing.SpringIn);
-        var selectedTask = UpdateSelectedResourcePanelVisibility(forceHide: true);
-        await Task.WhenAll(mainPanelTask, selectedTask);
-        // Clean up after animation: hide panels but keep current selection and machine state
-        ResourceListContainer.IsVisible = false;
-        ResourceListContainer.InputTransparent = true;
-    #else
-        // Animate main panel closing
-        await ResourceListContainer.ScaleTo(0, 200, Easing.SpringIn);
-        ResourceListContainer.IsVisible = false;
-        ResourceListContainer.InputTransparent = true;
-    #endif
 
-        // IMPORTANT: do NOT clear `_selectedResource` nor trigger `AnimateMachineDisplayForSelection()` here.
-        // Leaving selection intact prevents the ResourceSlot sprite from flickering when the panel closes.
-        
-        _isAnimating = false;
-#else
-        await Task.CompletedTask;
-#endif
-    }
-    
-    /// <summary>
-    /// Closes panel immediately without animation (used for page disappearing)
-    /// </summary>
-    private void CloseResourcePanel()
-    {
-#if ANDROID || WINDOWS
-        if (ResourceListContainer == null || _isAnimating)
-            return;
-        
-        ResourceListContainer.Scale = 0;
-        ResourceListContainer.IsVisible = false;
-        ResourceListContainer.InputTransparent = true;
-        
-        // Hide dynamic SelectedResourcePanel on Android when closing
-    #if ANDROID
-        if (_selectedResourcePanel != null)
-        {
-            _selectedResourcePanel.IsVisible = false;
-            _selectedResourcePanel.Scale = 0;
-        }
-    #endif
-#endif
-    }
-    
-    /// <summary>
-    /// Updates the ResourcePanel with all available resources from ResourceLibrary
-    /// Creates a 9-Slice panel with pixel-art style if not already created
-    /// </summary>
-    private void UpdateResourcePanel()
-    {
-#if ANDROID || WINDOWS
-        if (ResourcesList == null)
-        {
-            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] UpdateResourcePanel: ResourcesList is null");
-            return;
-        }
-        
-        System.Diagnostics.Debug.WriteLine("[LaboratoryPage] UpdateResourcePanel: Updating resource panel");
-        
-        // Create 9-slice panel if not already created
-        if (_nineSlicePanelContainer == null)
-        {
-            var screenProps = ScreenProperties.Instance;
-            var adaptive = screenProps.AdaptiveScale;
-            
 #if ANDROID
-            const double baseWidth = 250.0;
-            const double baseHeight = 500.0;
+        // For selected panels on Android, animate the wrapper instead
+        View? targetView = null;
+        if (panel == _selectedResourcePanel && _selectedResourcePanelWrapper != null)
+            targetView = _selectedResourcePanelWrapper;
+        else
+            targetView = panel.Panel;
 #else
-            const double baseWidth = 300.0;
-            const double baseHeight = 500.0;
+        View targetView = panel.Panel;
 #endif
-            
-            double panelWidth = baseWidth * adaptive;
-            double panelHeight = baseHeight * adaptive;
-            double cornerSize = 40 * adaptive; // Scale corner size with screen
-            
-            var (panel, scroll) = UserInterfaceCreator.CreateNineSlicePanelWithScroll(
-                panelWidth,
-                panelHeight,
-                cornerSize,
-                Color.FromArgb("#0f0c29"),
-                Color.FromArgb("#302b63"),
-                cornerImage: "ui__panel_corner.png",
-                horizontalEdgeImage: "ui__panel_edge_horizontal.png",
-                verticalEdgeImage: "ui__panel_edge_vertical.png",
-                centerImage: "ui__panel_center.png"
-            );
-            
-            _nineSlicePanelContainer = panel;
-            _panelContentScroll = scroll;
-            try { _nineSlicePanelContainer.AutomationId = "ResourceNineSlicePanel"; } catch { }
-            try { _panelContentScroll.AutomationId = "ResourceScroll"; } catch { }
-            
-            // Replace ResourceListContainer content with 9-slice panel
-            if (ResourceListContainer != null)
-            {
-                ResourceListContainer.Children.Clear();
-                ResourceListContainer.Children.Add(_nineSlicePanelContainer);
-                
-                // Set up animation properties
-                _nineSlicePanelContainer.AnchorX = 0.5;
-                _nineSlicePanelContainer.AnchorY = 0.5;
-            }
-            
-            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Created 9-slice panel: {panelWidth}x{panelHeight}, corner: {cornerSize}");
-        }
 
-        // Create SelectedResourcePanel dynamically on Android (only once)
-#if ANDROID
-        try
+        if (animate)
         {
-            // Create selected panel only if missing
-            var missingSelected = UserInterfaceCreator.CheckUiElementsExist(ResourceListWrapper, new[] { "SelectedResourcePanel" });
-            if ((missingSelected is System.Collections.Generic.List<string> miss && miss.Contains("SelectedResourcePanel")) || (_selectedResourcePanel == null && ResourceListWrapper != null))
-            {
-                var screenProps = ScreenProperties.Instance;
-                var adaptive = screenProps.AdaptiveScale;
+            _animatingPanels.Add(panel);
 
-                const double baseHeight = 500.0;
-                const double baseMargin = 20.0;
-                const double selectedPanelHeight = 160.0;
-                const double baseWidth = 250.0;
-                const double selectedPanelWidth = 250.0;
+            // Prepare panel for animation
+            targetView.Scale = 0;
+            targetView.IsVisible = true;
+            targetView.InputTransparent = false;
+            
+            // Update panel to ensure items are populated
+            if(panel == _resourcePanel)
+                UpdateResourcePanel();
 
-                var sizes = UserInterfaceCreator.GetPanelSizes(adaptive, baseWidth, baseHeight, baseMargin, selectedPanelWidth, selectedPanelHeight, isAndroid: true);
+            // Animate panel
+            await targetView.ScaleTo(1, 200, Easing.SpringOut);
 
-                double cornerSize = 40 * adaptive;
-
-                // Create label bound to ViewModel.SelectedResourceName
-                var selectedLabel = new Label
-                {
-                    HorizontalOptions = LayoutOptions.Center,
-                    VerticalOptions = LayoutOptions.Center,
-                    TextColor = Colors.White
-                };
-                if (BindingContext != null)
-                {
-                    selectedLabel.BindingContext = BindingContext;
-                    selectedLabel.SetBinding(Label.TextProperty, new Binding("SelectedResourceName"));
-                }
-                
-                try
-                {
-                    selectedLabel.FontFamily = "SilkscreenBold";
-                }
-                catch { }
-
-                var selectedPanel = UserInterfaceCreator.CreateNineSlicePanel(
-                    width: sizes.SelectedWidth,
-                    height: sizes.SelectedHeight,
-                    cornerSize: cornerSize,
-                    backgroundColor: Color.FromArgb("#1A1A1A"),
-                    borderColor: Color.FromArgb("#FFD700"),
-                    content: selectedLabel,
-                    cornerImage: "ui__panel_highlighted_corner.png",
-                    horizontalEdgeImage: "ui__panel_highlighted_edge_horizontal.png",
-                    verticalEdgeImage: "ui__panel_highlighted_edge_vertical.png",
-                    centerImage: "ui__panel_highlighted_center.png"
-                );
-
-                // Wrap the 9-slice panel in a Border so it has a visible stroke/background
-                var wrapperBorder = new Border
-                {
-                    Content = selectedPanel,
-                    Stroke = null,
-                    StrokeThickness = 0
-                };
-
-                // Place in right gutter wrapper at proportional position x=1, y=0.15
-                // Match ResourceListContainer right margin so panel aligns with list
-                wrapperBorder.Margin = new Thickness(0, 0, sizes.Margin, 0);
-                AbsoluteLayout.SetLayoutBounds(wrapperBorder, new Rect(1, 0.15, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-                AbsoluteLayout.SetLayoutFlags(wrapperBorder, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
-
-                // Initial animation/visibility state
-                wrapperBorder.AnchorX = 0.5;
-                wrapperBorder.AnchorY = 0.5;
-                wrapperBorder.Scale = 0;
-                wrapperBorder.IsVisible = false;
-                wrapperBorder.InputTransparent = true;
-
-                    _selectedResourcePanel = wrapperBorder;
-                    try { wrapperBorder.AutomationId = "SelectedResourcePanel"; } catch { }
-                // ensure it's on top of ResourceListContainer
-                _selectedResourcePanel.ZIndex = 1001;
-                ResourceListWrapper.Children.Add(_selectedResourcePanel);
-                System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Created dynamic SelectedResourcePanel (Android)");
-            }
+            _animatingPanels.Remove(panel);
         }
-        catch (Exception ex)
+        else
         {
-            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error creating SelectedResourcePanel: {ex.Message}");
+            // Non-animated open
+            targetView.Scale = 1;
+            targetView.IsVisible = true;
+            targetView.InputTransparent = false;
+
+            // Update panel to ensure items are populated
+            if(panel == _resourcePanel)
+                UpdateResourcePanel();
         }
-#endif
-        
-        // Get the content stack layout from scroll view
-        if (_panelContentScroll?.Content is not VerticalStackLayout contentStack)
-        {
-            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] UpdateResourcePanel: Content stack layout not found");
+    }
+
+    private async Task ClosePanel(bool animate = true, StyledPanel? panel = null)
+    {
+        if (panel == null)
             return;
-        }
 
-        // Use CheckUiElementsExist to avoid recreating existing items
-        try
-        {
-            var resources = ResourceLibrary.GetAllResources().ToList();
-            var requiredIds = resources.Select(r => $"ResourceItem_{r.Id}").ToList();
-
-            var missingObj = UserInterfaceCreator.CheckUiElementsExist(_panelContentScroll as VisualElement ?? (VisualElement?)contentStack, requiredIds);
-
-            if (_resourceItemCache == null)
-                _resourceItemCache = new Dictionary<string, Border>();
-
-            if (missingObj is bool allPresent && allPresent == false)
-            {
-                // All present: update selection visuals only
-                UpdateResourceItemSelectionVisuals();
-                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Resource items already exist, updated selection visuals");
-            }
-            else if (missingObj is System.Collections.Generic.List<string> missing)
-            {
-                // Create only missing resource items
-                foreach (var missingId in missing)
-                {
-                    var idSuffix = missingId.StartsWith("ResourceItem_") ? missingId.Substring("ResourceItem_".Length) : missingId;
-                    var resource = resources.FirstOrDefault(r => r.Id == idSuffix);
-                    if (resource == null) continue;
-
-                    var resourceItem = CreateResourceItem(resource);
-                    try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
-                    _resourceItemCache[resource.Id] = resourceItem;
-                    contentStack.Children.Add(resourceItem);
-                }
-
-                // Fallback if still missing
-                var stillMissing = UserInterfaceCreator.CheckUiElementsExist(_panelContentScroll as VisualElement ?? (VisualElement?)contentStack, requiredIds);
-                if (!(stillMissing is bool sb && sb == false))
-                {
-                    // Recreate everything as a fallback
-                    contentStack.Children.Clear();
-                    _resourceItemCache.Clear();
-                    foreach (var resource in resources)
-                    {
-                        var resourceItem = CreateResourceItem(resource);
-                        try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
-                        _resourceItemCache[resource.Id] = resourceItem;
-                        contentStack.Children.Add(resourceItem);
-                    }
-                }
-
-                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Created {missing.Count} missing resource items");
-            }
-            else
-            {
-                // Unknown result — fall back to full recreation
-                contentStack.Children.Clear();
-                _resourceItemCache.Clear();
-                foreach (var resource in resources)
-                {
-                    var resourceItem = CreateResourceItem(resource);
-                    try { resourceItem.AutomationId = $"ResourceItem_{resource.Id}"; } catch { }
-                    _resourceItemCache[resource.Id] = resourceItem;
-                    contentStack.Children.Add(resourceItem);
-                }
-                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Fallback: recreated all resource items");
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error updating ResourcePanel: {ex.Message}");
-        }
+#if ANDROID
+        // For selected panels on Android, animate the wrapper instead
+        View? targetView = null;
+        if (panel == _selectedResourcePanel && _selectedResourcePanelWrapper != null)
+            targetView = _selectedResourcePanelWrapper;
+        else
+            targetView = panel.Panel;
+#else
+        View targetView = panel.Panel;
 #endif
+
+        if (animate)
+        {
+            _animatingPanels.Add(panel);
+
+            // Animate panel
+            await targetView.ScaleTo(0, 200, Easing.SpringIn);
+            targetView.IsVisible = false;
+            targetView.InputTransparent = true;
+
+            _animatingPanels.Remove(panel);
+        }
+        else
+        {
+            // Non-animated open
+            targetView.AnchorX = 0.5;
+            targetView.AnchorY = 0.5;
+            targetView.Scale = 0;
+            targetView.IsVisible = false;
+            targetView.InputTransparent = true;
+
+        }
     }
     
-    /// <summary>
-    /// Creates a UI element for a resource item
-    /// Layout matches SeedsPanel/LiquidsPanel exactly
-    /// </summary>
-    private Border CreateResourceItem(ResourceData resource)
+    private async Task CloseAllPanels()
     {
-        // Delegate to centralized creator for consistency with other panels
+        var tasks = new List<Task>();
+        
+#if ANDROID
+        if (_resourcePanel != null && _resourcePanel.Panel.IsVisible)
+            tasks.Add(ClosePanel(true, _resourcePanel));
+        if (_selectedResourcePanel != null && _selectedResourcePanel.Panel.IsVisible)
+            tasks.Add(ClosePanel(true, _selectedResourcePanel));
+#else
+        if (_resourcePanel != null && _resourcePanel.Panel.IsVisible)
+            tasks.Add(ClosePanel(true, _resourcePanel));
+#endif
+
+        await Task.WhenAll(tasks);
+    }
+
+    // Helper to call CloseAllPanels from a synchronous Action without CS4014 warnings
+    private void FireAndForgetCloseAllPanels()
+    {
+#pragma warning disable CS4014
+        CloseAllPanels();
+#pragma warning restore CS4014
+    }
+
+    private StyledPanel CreateResourceItem(ResourceData resource)
+    {
         bool isSelected = _selectedResource?.Id == resource.Id;
         System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] CreateResourceItem: {resource.Name}, isSelected={isSelected}, _selectedResource={_selectedResource?.Name ?? "null"}");
-
 #if ANDROID
         bool isAndroid = true;
 #else
         bool isAndroid = false;
 #endif
-
+        var adaptive = screenProps.AdaptiveScale;
         var appRes = Application.Current?.Resources;
-        double panelItemHeight = appRes != null && appRes.ContainsKey("ResourcePanelIconSize")
+        // Resource values are already set by ScreenProperties.UpdateFontSizes(adaptiveScale)
+        // so use them directly without applying `adaptive` again to avoid double-scaling.
+        double panelItemHeight = (appRes != null && appRes.ContainsKey("ResourcePanelIconSize")
             ? (double)appRes["ResourcePanelIconSize"]
-            : (double)Resources["ResourcePanelIconSize"];
-        double qtySize = appRes != null && appRes.ContainsKey("ResourcePanelQtySize")
+            : (double)Resources["ResourcePanelIconSize"]);
+        double qtySize = (appRes != null && appRes.ContainsKey("ResourcePanelQtySize")
             ? (double)appRes["ResourcePanelQtySize"]
-            : (double)Resources["ResourcePanelQtySize"];
-        double bodySize = appRes != null && appRes.ContainsKey("ResourcePanelBodySize")
+            : (double)Resources["ResourcePanelQtySize"]);
+        double bodySize = (appRes != null && appRes.ContainsKey("ResourcePanelBodySize")
             ? (double)appRes["ResourcePanelBodySize"]
-            : (double)Resources["ResourcePanelBodySize"];
+            : (double)Resources["ResourcePanelBodySize"]);
 
-        return UserInterfaceCreator.CreatePanelItem(resource.Id, resource.Name, resource.Sprite, isSelected,
-            panelItemHeight, qtySize, bodySize, isAndroid, () => OnResourceSelected(resource), isEnabled: resource.Quantity > 0, bindingContext: resource);
+        var panelItem = new StyledPanel(
+            type: "panelItem",
+            id: resource.Id,
+            name: resource.Name,
+            sprite: resource.Sprite,
+            isSelected: isSelected,
+            panelItemHeight: panelItemHeight,
+            qtyFontSize: qtySize,
+            bodyFontSize: bodySize,
+            isAndroid: isAndroid,
+            bindingContext: resource);
+        panelItem.ClassId = resource.Id;
+        panelItem.BindingContext = resource; // Set BindingContext on the panel itself for access in Update methods
+        return panelItem;
     }
     
     // ============================================================================
     // Item Selection Handlers
     // ============================================================================
-    
-    private void OnResourceSelected(ResourceData resource)
+
+    private async Task OnResourceSelected(ResourceData resource)
     {
         // Block selection while display is sliding
         if (_isDisplaySliding)
-        {
-            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Resource selection ignored during display slide animation");
             return;
-        }
         
-        // Toggle selection if clicking already-selected resource (only if enabled: quantity > 0 and not sliding)
-        if (_selectedResource?.Id == resource.Id)
+        if (_resourcePanelItems != null)
         {
-            if (resource.Quantity > 0 && !_isDisplaySliding)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Deselecting resource '{resource.Name}'");
-                    _selectedResource = null;
-                    // Animate/hide the selected resource panel when deselecting
-                    _ = UpdateSelectedResourcePanelVisibility();
-                    UpdateResourceItemSelectionVisuals();
-                    UpdateMachineContentVisual();
-                    _ = AnimateMachineDisplayForSelection();
-                }
-            return;
-        }
-        
-            // Set new selection
-            _selectedResource = resource;
-
-            // Update selected name via ViewModel binding
-            if (BindingContext is LaboratoryViewModel vm)
-                vm.SelectedResourceName = resource.Name;
-
-            // Update dynamic selected panel visibility (Android)
-            _ = UpdateSelectedResourcePanelVisibility();
-        
-        // Selected panel animation removed (SelectedResourcePanel recreated elsewhere)
-        
-        // Update UI
-        // Update selection visuals without rebuilding the whole panel to avoid image flicker
-        UpdateResourceItemSelectionVisuals();
-        UpdateMachineContentVisual();
-        _ = AnimateMachineDisplayForSelection();
-    }
-
-    /// <summary>
-    /// Update selection/highlight visuals for resource items using the cached Border elements.
-    /// Uses fade animation to switch between normal and highlighted 9-slice backgrounds.
-    /// </summary>
-    private void UpdateResourceItemSelectionVisuals()
-    {
-#if ANDROID || WINDOWS
-        try
-        {
-            foreach (var kv in _resourceItemCache)
+            var panel = _resourcePanelItems.FirstOrDefault(p => p.ClassId == resource.Id);
+            if (!panel!.ItemIsEnabled)
             {
-                var id = kv.Key;
-                var border = kv.Value;
-
-                if (border == null)
-                    continue;
-
-                // Determine whether this item is selected
-                bool isSelected = _selectedResource != null && _selectedResource.Id == id;
-
-                // Use UserInterfaceCreator helper to animate selection state
-                UserInterfaceCreator.SetPanelItemSelected(border, isSelected, animate: true);
+                System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Tried to select disabled resource {resource.Name}");
+                return;
             }
         }
-        catch (Exception ex)
+
+        // If already selected, clear selection (toggle off)
+        if (_selectedResource?.Id == resource.Id)
         {
-            System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateResourceItemSelectionVisuals error: {ex.Message}");
-        }
+            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Deselecting resource {resource.Name}");
+            
+            // Animate deselection on the panel item
+            if (_resourcePanelItems != null)
+            {
+                var panel = _resourcePanelItems.FirstOrDefault(p => p.ClassId == resource.Id);
+                if (panel != null)
+                    panel.SetPanelSelected(false, animate: true);
+            }
+            
+            _selectedResource = null;
+            
+            // Update selected name via ViewModel binding
+            var gvm = BindingContext as LaboratoryViewModel;
+            if (gvm != null)
+                gvm.SelectedResourceName = string.Empty;
+
+            UpdateResourcePanel();
+            UpdateMachineContentVisual();
+            _ = AnimateMachineDisplayForSelection();
+            
+            // Update dynamic selected panel visibility (Android)
+#if ANDROID
+            await ClosePanel(true, _selectedResourcePanel);
 #endif
+            return;
+        }
+        
+        // Deselect previously selected liquid panel (if any)
+        if (_selectedResource != null && _resourcePanelItems != null)
+        {
+            var oldPanel = _resourcePanelItems.FirstOrDefault(p => p.ClassId == _selectedResource.Id);
+            if (oldPanel != null)
+                oldPanel.SetPanelSelected(false, animate: true);
+        }
+        
+        // Set new selection
+        _selectedResource = resource;
+        
+        // Animate selection on the new panel item
+        if (_resourcePanelItems != null)
+        {
+            var newPanel = _resourcePanelItems.FirstOrDefault(p => p.ClassId == resource.Id);
+            if (newPanel != null)
+                newPanel.SetPanelSelected(true, animate: true);
+        }
+        
+        // Update selected name via ViewModel binding
+        var gvm2 = BindingContext as LaboratoryViewModel;
+        if (gvm2 != null)
+            gvm2.SelectedResourceName = resource.Name;
+
+        UpdateResourcePanel();
+        UpdateMachineContentVisual();
+        _ = AnimateMachineDisplayForSelection();
+        
+        // Update dynamic selected panel visibility (Android)
+#if ANDROID
+        await OpenPanel(true, _selectedResourcePanel);
+#endif
+    }
+
+    private void UpdateResourcePanel()
+    {
+        if (_resourcePanelItems == null)
+            return;
+
+        foreach (var panel in _resourcePanelItems)
+        {
+            // Find the corresponding resource from panel's binding context
+            if (panel.BindingContext is ResourceData resource)
+            {
+                // Determine whether this item is selected
+                bool isSelected = _selectedResource != null && _selectedResource.Id == resource.Id;
+                // Update selection state
+                panel.SetPanelSelected(isSelected, animate: false);
+                panel.SetPanelItemEnabled(resource.Quantity > 0);
+            }
+        }
     }
 
     /// <summary>
@@ -1337,7 +1580,7 @@ public partial class LaboratoryPage : ContentPage
     private async Task UpdateSelectedResourcePanelVisibility(bool forceHide = false)
     {
 #if ANDROID
-        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateSelectedResourcePanelVisibility called. selectedResource={( _selectedResource?.Name ?? "null")}, forceHide={forceHide}");
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] UpdateSelectedResourcePanelVisibility called. selectedResource={(_selectedResource?.Name ?? "null")}, forceHide={forceHide}");
 
         if (_selectedResourcePanel == null)
         {
@@ -1345,50 +1588,17 @@ public partial class LaboratoryPage : ContentPage
             return;
         }
 
-        bool shouldShow = !forceHide && _selectedResource != null && ResourceListContainer != null && ResourceListContainer.IsVisible;
-        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] SelectedResourcePanel shouldShow={shouldShow}, currentIsVisible={_selectedResourcePanel.IsVisible}");
+        bool shouldShow = !forceHide && _selectedResource != null && _resourcePanel != null && _resourcePanel.Panel.IsVisible;
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] SelectedResourcePanel shouldShow={shouldShow}, currentIsVisible={_selectedResourcePanel.Panel.IsVisible}");
 
         if (shouldShow)
         {
-            // Ensure layout bounds are applied
-            AbsoluteLayout.SetLayoutBounds(_selectedResourcePanel, new Rect(1, 0.15, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
-            AbsoluteLayout.SetLayoutFlags(_selectedResourcePanel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.XProportional | Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
-
-            // Bring to front by re-adding as last child
-            try
-            {
-                if (ResourceListWrapper != null)
-                {
-                    if (ResourceListWrapper.Children.Contains(_selectedResourcePanel))
-                    {
-                        ResourceListWrapper.Children.Remove(_selectedResourcePanel);
-                    }
-                    ResourceListWrapper.Children.Add(_selectedResourcePanel);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Error re-adding SelectedResourcePanel: {ex.Message}");
-            }
-
-            _selectedResourcePanel.InputTransparent = false;
-            _selectedResourcePanel.IsVisible = true;
-            _selectedResourcePanel.AnchorX = 0.5;
-            _selectedResourcePanel.AnchorY = 0.5;
-            _selectedResourcePanel.Scale = 0;
-            System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Showing SelectedResourcePanel and animating scale in");
-            try
-            {
-                await _selectedResourcePanel.ScaleTo(1, 200, Easing.SpringOut);
-            }
-            catch { }
+            await OpenPanel(true, _selectedResourcePanel);
         }
         else
         {
             System.Diagnostics.Debug.WriteLine("[LaboratoryPage] Hiding SelectedResourcePanel (if present)");
-            _selectedResourcePanel.InputTransparent = true;
-            try { await _selectedResourcePanel.ScaleTo(0, 150, Easing.SpringIn); } catch { }
-            _selectedResourcePanel.IsVisible = false;
+            await ClosePanel(true, _selectedResourcePanel);
         }
 #else
         await Task.CompletedTask;
@@ -1404,12 +1614,15 @@ public partial class LaboratoryPage : ContentPage
     /// </summary>
     private void OnDisplayAnimationStarted(object? sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
-        foreach (var item in _resourceItemCache.Values)
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Display animation started, disabling {_resourcePanelItems?.Count ?? 0} resource items");
+        if (_resourcePanelItems == null)
+            return;
+
+        foreach (var panel in _resourcePanelItems)
         {
-            UserInterfaceCreator.SetPanelItemEnabled(item, false);
+            // Disable all items during animation
+            panel.SetPanelItemEnabled(false);
         }
-#endif
     }
     
     /// <summary>
@@ -1417,18 +1630,22 @@ public partial class LaboratoryPage : ContentPage
     /// </summary>
     private void OnDisplayAnimationEnded(object? sender, EventArgs e)
     {
-#if ANDROID || WINDOWS
-        var resources = ResourceLibrary.GetAllResources();
-        foreach (var resource in resources)
+        System.Diagnostics.Debug.WriteLine($"[LaboratoryPage] Display animation ended, re-enabling resource items with qty > 0");
+        if (_resourcePanelItems == null)
+            return;
+
+        foreach (var panel in _resourcePanelItems)
         {
-            if (_resourceItemCache.TryGetValue(resource.Id, out var item))
+            // Find the corresponding resource from panel's binding context
+            if (panel.BindingContext is ResourceData resource)
             {
-                // Enable item if quantity > 0, disable otherwise
-                bool shouldEnable = resource.Quantity > 0;
-                UserInterfaceCreator.SetPanelItemEnabled(item, shouldEnable);
+                // Determine whether this item is selected
+                bool isSelected = _selectedResource != null && _selectedResource.Id == resource.Id;
+                // Update selection state
+                panel.SetPanelSelected(isSelected, animate: false);
+                panel.SetPanelItemEnabled(resource.Quantity > 0);
             }
         }
-#endif
     }
 
     /// <summary>

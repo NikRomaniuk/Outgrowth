@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
@@ -57,7 +57,6 @@
 
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
-		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
 		
 		<!-- Pot Sprites (pre-scaled, no resizing needed) -->
 		<MauiImage Include="Resources\Images\Sprites\Pots\*" Resize="False" />
@@ -67,6 +66,9 @@
 		
 		<!-- Lab Sprites (pre-scaled, no resizing needed) -->
 		<MauiImage Include="Resources\Images\Sprites\Lab\*" Resize="False" />
+		
+		<!-- Hub Sprites (pre-scaled, no resizing needed) -->
+		<MauiImage Include="Resources\Images\Sprites\Hub\*" Resize="False" />
 		
 		<!-- Seeds Sprites (pre-scaled, no resizing needed) -->
 		<MauiImage Include="Resources\Images\Sprites\Seeds\*" Resize="False" />

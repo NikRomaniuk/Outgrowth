@@ -49,6 +49,26 @@ public class StationObject : EnvObject, IInteractable
     /// </summary>
     public override View CreateVisualElement()
     {
+        // Create an AbsoluteLayout that contains the station image and a transparent hit area on top
+        var container = new AbsoluteLayout
+        {
+            WidthRequest = Width,
+            HeightRequest = Height
+        };
+
+        // Image for visual representation. Station Id may be an image filename.
+        var img = new Image
+        {
+            Source = Id,
+            Aspect = Aspect.AspectFit,
+            WidthRequest = Width,
+            HeightRequest = Height
+        };
+
+        AbsoluteLayout.SetLayoutBounds(img, new Rect(0, 0, Width, Height));
+        AbsoluteLayout.SetLayoutFlags(img, 0);
+
+        // Transparent border on top to capture taps
         var border = new Border
         {
             StrokeThickness = 0,
@@ -56,7 +76,9 @@ public class StationObject : EnvObject, IInteractable
             HeightRequest = Height,
             WidthRequest = Width
         };
-        
+        AbsoluteLayout.SetLayoutBounds(border, new Rect(0, 0, Width, Height));
+        AbsoluteLayout.SetLayoutFlags(border, 0);
+
         // Add tap gesture for interactivity
         var tapGesture = new TapGestureRecognizer();
         tapGesture.Tapped += (sender, e) =>
@@ -65,9 +87,13 @@ public class StationObject : EnvObject, IInteractable
             OnInteract();
         };
         border.GestureRecognizers.Add(tapGesture);
-        
-        VisualElement = border;
-        return border;
+
+        // Add image first, then border overlay
+        container.Children.Add(img);
+        container.Children.Add(border);
+
+        VisualElement = container;
+        return container;
     }
     
     /// <summary>

@@ -5,52 +5,23 @@
              x:Class="Outgrowth.Views.HubPage"
              x:DataType="viewModels:HubViewModel">
     
-    <Grid ColumnDefinitions="Auto,*,Auto">
+    <Grid   ColumnDefinitions="Auto,*,Auto"
+            x:Name="MainGrid">
         
         <!-- Layer 1: Background (spans all columns) -->
         <BoxView Grid.ColumnSpan="3" Color="#0A0E1A" />
         
-        <!-- TODO: Replace with actual space background image when available -->
-        <Image Grid.ColumnSpan="3"
-               Source="dotnet_bot.png" 
-               Aspect="AspectFill"
-               Opacity="0.3"/>
-        
-        <!-- Left Gutter: Greenhouse Button -->
+        <!-- Left Gutter: Placeholder for navigation buttons (created dynamically) -->
         <AbsoluteLayout Grid.Column="0"
+                       x:Name="LeftGutterPlaceholder"
                        HorizontalOptions="Start"
-                       VerticalOptions="Fill"
-                       ZIndex="1000">
-            <Border x:Name="GreenhouseButton"
-                    AbsoluteLayout.LayoutBounds="0,1,AutoSize,AutoSize"
-                    AbsoluteLayout.LayoutFlags="YProportional"
-                    StrokeThickness="0"
-                    BackgroundColor="Transparent"
-                    HeightRequest="300"
-                    WidthRequest="300"
-                    Margin="20,0,0,20">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnGreenhouseClicked"/>
-                </Border.GestureRecognizers>
-                <Grid>
-                    <!-- Placeholder image area -->
-                    <BoxView Color="#2D5016"
-                            CornerRadius="10"
-                            Opacity="0.5"/>
-                    <Label Text="🌿"
-                           FontSize="{DynamicResource ButtonIconSize}"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
-                    <Label Text="[GrHouse Image]"
-                           FontSize="{DynamicResource ButtonPlaceholderSize}"
-                           HorizontalOptions="Center"
-                           VerticalOptions="End"
-                           Margin="0,0,0,10"
-                           TextColor="White"
-                           Opacity="0.7"/>
-                </Grid>
-            </Border>
-        </AbsoluteLayout>
+                       VerticalOptions="Center"
+                       BackgroundColor="Transparent"
+                       WidthRequest="300"
+                       HeightRequest="500"
+                       Margin="20,0,0,0"
+                       InputTransparent="True"
+                       ZIndex="1000"/>
         
         <!-- Center Column: Environment (16:9 Aspect Ratio, Centered, Scaled by Height) -->
         <ContentView x:Name="EnvironmentWrapper"
@@ -71,161 +42,21 @@
             </AbsoluteLayout>
         </ContentView>
         
-        <!-- Right Gutter: Laboratory Button -->
+        <!-- Right Gutter: Placeholder for navigation buttons (created dynamically) -->
         <AbsoluteLayout Grid.Column="2"
+                       x:Name="RightGutterPlaceholder"
                        HorizontalOptions="End"
                        VerticalOptions="Fill"
-                       ZIndex="1000">
-            <Border x:Name="LaboratoryButton"
-                    AbsoluteLayout.LayoutBounds="1,1,AutoSize,AutoSize"
-                    AbsoluteLayout.LayoutFlags="XProportional,YProportional"
-                    StrokeThickness="0"
-                    BackgroundColor="Transparent"
-                    HeightRequest="300"
-                    WidthRequest="300"
-                    Margin="0,0,20,20">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnLaboratoryClicked"/>
-                </Border.GestureRecognizers>
-                <Grid>
-                    <BoxView Color="#2C1A5F"
-                            CornerRadius="10"
-                            Opacity="0.5"/>
-                    <Label Text="🔬"
-                           FontSize="{DynamicResource ButtonIconSize}"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center"/>
-                    <Label Text="[Lab Image]"
-                           FontSize="{DynamicResource ButtonPlaceholderSize}"
-                           HorizontalOptions="Center"
-                           VerticalOptions="End"
-                           Margin="0,0,0,10"
-                           TextColor="White"
-                           Opacity="0.7"/>
-                </Grid>
-            </Border>
-        </AbsoluteLayout>
+                       BackgroundColor="Transparent"
+                       WidthRequest="300"
+                       HeightRequest="500"
+                       Margin="0,0,20,0"
+                       InputTransparent="True"
+                       ZIndex="1000"/>
         
-        <!-- Overlay Panels (Initially Hidden) - Spans all columns -->
-        <!-- Market Panel -->
-        <Grid x:Name="MarketPanel" 
-              Grid.ColumnSpan="3"
-              IsVisible="False"
-              BackgroundColor="Transparent"
-              ZIndex="500">
-            <Grid.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnMarketPanelTapped"/>
-            </Grid.GestureRecognizers>
-            <Border x:Name="MarketPanelBorder"
-                    StrokeThickness="2"
-                    Stroke="#4CAF50"
-                    BackgroundColor="#1A1A1A"
-                    Padding="20"
-                    WidthRequest="1200"
-                    HeightRequest="800"
-                    HorizontalOptions="Center"
-                    VerticalOptions="Center">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnMarketBorderTapped"/>
-                </Border.GestureRecognizers>
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="15"/>
-                </Border.StrokeShape>
-                <VerticalStackLayout Spacing="15">
-                    <Label Text="📦 Market Panel"
-                           FontSize="{DynamicResource PanelTitleSize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           VerticalOptions="Center"/>
-                    <Label Text="Trading and market features coming soon..."
-                           FontSize="{DynamicResource PanelBodySize}"
-                           TextColor="White"
-                           Opacity="0.7"
-                           Margin="0,40,0,0"
-                           HorizontalOptions="Center"/>
-                </VerticalStackLayout>
-            </Border>
-        </Grid>
-        
-        <!-- Quest Panel -->
-        <Grid x:Name="QuestPanel" 
-              Grid.ColumnSpan="3"
-              IsVisible="False"
-              BackgroundColor="Transparent"
-              ZIndex="500">
-            <Grid.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnQuestPanelTapped"/>
-            </Grid.GestureRecognizers>
-            <Border x:Name="QuestPanelBorder"
-                    StrokeThickness="2"
-                    Stroke="#4CAF50"
-                    BackgroundColor="#1A1A1A"
-                    Padding="20"
-                    WidthRequest="1200"
-                    HeightRequest="800"
-                    HorizontalOptions="Center"
-                    VerticalOptions="Center">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnQuestBorderTapped"/>
-                </Border.GestureRecognizers>
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="15"/>
-                </Border.StrokeShape>
-                <VerticalStackLayout Spacing="15">
-                    <Label Text="📡 Quest Console"
-                           FontSize="{DynamicResource PanelTitleSize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           VerticalOptions="Center"/>
-                    <Label Text="Missions and quests coming soon..."
-                           FontSize="{DynamicResource PanelBodySize}"
-                           TextColor="White"
-                           Opacity="0.7"
-                           Margin="0,40,0,0"
-                           HorizontalOptions="Center"/>
-                </VerticalStackLayout>
-            </Border>
-        </Grid>
-        
-        <!-- Statistics Panel -->
-        <Grid x:Name="StatsPanel" 
-              Grid.ColumnSpan="3"
-              IsVisible="False"
-              BackgroundColor="Transparent"
-              ZIndex="500">
-            <Grid.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnStatsPanelTapped"/>
-            </Grid.GestureRecognizers>
-            <Border x:Name="StatsPanelBorder"
-                    StrokeThickness="2"
-                    Stroke="#4CAF50"
-                    BackgroundColor="#1A1A1A"
-                    Padding="20"
-                    WidthRequest="1200"
-                    HeightRequest="800"
-                    HorizontalOptions="Center"
-                    VerticalOptions="Center">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnStatsBorderTapped"/>
-                </Border.GestureRecognizers>
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="15"/>
-                </Border.StrokeShape>
-                <VerticalStackLayout Spacing="15">
-                    <Label Text="📊 Statistics &amp; Collection"
-                           FontSize="{DynamicResource PanelTitleSize}"
-                           FontAttributes="Bold"
-                           TextColor="White"
-                           VerticalOptions="Center"/>
-                    <Label Text="Statistics and collection tracking coming soon..."
-                           FontSize="{DynamicResource PanelBodySize}"
-                           TextColor="White"
-                           Opacity="0.7"
-                           Margin="0,40,0,0"
-                           HorizontalOptions="Center"/>
-                </VerticalStackLayout>
-            </Border>
-        </Grid>
+        <!-- Overlay Panels (Initially Hidden) - Created dynamically in code-behind -->
+        <!-- Panels are created as StyledPanel type "scroll" instances and added to MainGrid at runtime -->
+        <!-- Panel placeholders are managed programmatically for Market, Quest, and Stats panels -->
         
         <!-- Fade Overlay for Android Navigation Transitions -->
         <BoxView x:Name="FadeOverlay"

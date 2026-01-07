@@ -62,7 +62,7 @@
                        WidthRequest="300"
                        HeightRequest="500"
                        Margin="0,0,20,0"
-                       InputTransparent="False"
+                       InputTransparent="True"
                        ZIndex="1000"/>
         
         <!-- Fade Overlay for Android Navigation Transitions -->

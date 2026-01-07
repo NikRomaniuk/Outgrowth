@@ -32,8 +32,8 @@ public partial class GreenhousePage : ContentPage
     private bool _isLiquidsButtonSelected = false;
     private bool _isSeedsButtonSelected = false;
     
-    // Per-panel animation tracking to allow multiple panels to animate concurrently
-    private readonly System.Collections.Generic.HashSet<StyledPanel> _animatingPanels = new();
+    // Animation counter to disable tools panel buttons during any panel animation
+    private int _animatingPanelsCount = 0;
     
     // Debounce timer for OnPageSizeChanged
     private System.Threading.Timer? _sizeChangedDebounceTimer;
@@ -309,7 +309,11 @@ public partial class GreenhousePage : ContentPage
             {
                 _liquidsPanelWrapper.Children.Clear();
                 _liquidsPanelWrapper.Children.Add(_liquidsPanel.Panel);
+#if ANDROID
+                AbsoluteLayout.SetLayoutBounds(_liquidsPanel.Panel, new Rect(0, 0.75, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#else
                 AbsoluteLayout.SetLayoutBounds(_liquidsPanel.Panel, new Rect(0, 0.5, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#endif
                 AbsoluteLayout.SetLayoutFlags(_liquidsPanel.Panel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
                 _liquidsPanel.Panel.AnchorX = 0.5;
                 _liquidsPanel.Panel.AnchorY = 0.5;
@@ -457,7 +461,11 @@ public partial class GreenhousePage : ContentPage
             {
                 _seedsPanelWrapper.Children.Clear();
                 _seedsPanelWrapper.Children.Add(_seedsPanel.Panel);
+#if ANDROID
+                AbsoluteLayout.SetLayoutBounds(_seedsPanel.Panel, new Rect(0, 0.75, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#else
                 AbsoluteLayout.SetLayoutBounds(_seedsPanel.Panel, new Rect(0, 0.5, AbsoluteLayout.AutoSize, AbsoluteLayout.AutoSize));
+#endif
                 AbsoluteLayout.SetLayoutFlags(_seedsPanel.Panel, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.YProportional);
                 _seedsPanel.Panel.AnchorX = 0.5;
                 _seedsPanel.Panel.AnchorY = 0.5;
@@ -745,7 +753,7 @@ public partial class GreenhousePage : ContentPage
 
             if (_harvesterButton == null)
             {
-                _harvesterButton = CreateButton("harvester_icon.png", OnHarvesterButtonClicked);
+                _harvesterButton = CreateButton("ui__icon_harvester.png", OnHarvesterButtonClicked);
                 _toolsPanelContentGrid.Children.Add(_harvesterButton);
                 Grid.SetColumn(_harvesterButton, 1);
             }
@@ -923,7 +931,7 @@ public partial class GreenhousePage : ContentPage
 
             if (_leftArrowButton == null)
             {
-                _leftArrowButton = CreateButton("◄", OnLeftArrowButtonClicked);
+                _leftArrowButton = CreateButton("ui__icon_left_arrow.png", OnLeftArrowButtonClicked);
                 var tapSel = new TapGestureRecognizer();
                 tapSel.Tapped += OnLeftArrowButtonClicked;
                 _leftArrowButton.GestureRecognizers.Add(tapSel);
@@ -933,7 +941,7 @@ public partial class GreenhousePage : ContentPage
 
             if (_rightArrowButton == null)
             {
-                _rightArrowButton = CreateButton("►", OnRightArrowButtonClicked);
+                _rightArrowButton = CreateButton("ui__icon_right_arrow.png", OnRightArrowButtonClicked);
                 var tapSel = new TapGestureRecognizer();
                 tapSel.Tapped += OnRightArrowButtonClicked;
                 _rightArrowButton.GestureRecognizers.Add(tapSel);
@@ -996,7 +1004,7 @@ public partial class GreenhousePage : ContentPage
             // Create icon for Hub button
             var hubIcon = new Image
             {
-                Source = "hub_icon.png", // Replace with actual hub icon if available
+                Source = "ui__icon_hub.png", // Replace with actual hub icon if available
                 Aspect = Aspect.AspectFit,
                 WidthRequest = buttonHeight * 0.7,
                 HeightRequest = buttonHeight * 0.7,
@@ -1045,7 +1053,7 @@ public partial class GreenhousePage : ContentPage
                         tooltipLabel.FontFamily = (string)Resources["ResourcePanelBodyFont"];
                 }
                 catch { }
-                tooltipLabel.FontSize = 60 * adaptive;
+                tooltipLabel.FontSize = 50 * adaptive;
                 Grid.SetRow(tooltipLabel, 1);
                 Grid.SetColumn(tooltipLabel, 1);
                 tooltipLabel.ZIndex = 1;
@@ -1361,72 +1369,38 @@ public partial class GreenhousePage : ContentPage
     
     private void UpdateLiquidsPanel()
     {
-        // Ensure each panel item reflects current selection state and enabled state (no animation)
         if (_liquidPanelItems == null)
-        {
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateLiquidsPanel: _liquidPanelItems is null");
             return;
-        }
 
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateLiquidsPanel: Updating {_liquidPanelItems.Count} items");
-        
         foreach (var panel in _liquidPanelItems)
         {
-            try
+            // Find the corresponding resource from panel's binding context
+            if (panel.BindingContext is LiquidData liquid)
             {
-                bool isSelected = _selectedLiquid != null && panel.ClassId == _selectedLiquid.Id;
+                // Determine whether this item is selected
+                bool isSelected = _selectedLiquid != null && _selectedLiquid.Id == liquid.Id;
+                // Update selection state
                 panel.SetPanelSelected(isSelected, animate: false);
-                
-                // Check if material quantity is > 0 and enable/disable panel item accordingly
-                if (panel.BindingContext is LiquidData liquid)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Liquid {liquid.Name} (ClassId: {panel.ClassId}): Quantity={liquid.Quantity}, setting enabled={liquid.Quantity > 0}");
-                    panel.SetPanelItemEnabled(liquid.Quantity > 0);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Panel ClassId={panel.ClassId} has no LiquidData in BindingContext");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateLiquidsPanel: failed updating panel {panel.ClassId}: {ex.Message}");
+                panel.SetPanelItemEnabled(liquid.Quantity > 0);
             }
         }
     }
     
     private void UpdateSeedsPanel()
     {
-        // Ensure each panel item reflects current selection state and enabled state (no animation)
         if (_seedPanelItems == null)
-        {
-            System.Diagnostics.Debug.WriteLine("[GreenhousePage] UpdateSeedsPanel: _seedPanelItems is null");
             return;
-        }
 
-        System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateSeedsPanel: Updating {_seedPanelItems.Count} items");
-        
         foreach (var panel in _seedPanelItems)
         {
-            try
+            // Find the corresponding resource from panel's binding context
+            if (panel.BindingContext is SeedData seed)
             {
-                bool isSelected = _selectedSeed != null && panel.ClassId == _selectedSeed.Id;
+                // Determine whether this item is selected
+                bool isSelected = _selectedSeed != null && _selectedSeed.Id == seed.Id;
+                // Update selection state
                 panel.SetPanelSelected(isSelected, animate: false);
-                
-                // Check if material quantity is > 0 and enable/disable panel item accordingly
-                if (panel.BindingContext is SeedData seed)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Seed {seed.Name} (ClassId: {panel.ClassId}): Quantity={seed.Quantity}, setting enabled={seed.Quantity > 0}");
-                    panel.SetPanelItemEnabled(seed.Quantity > 0);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Panel ClassId={panel.ClassId} has no SeedData in BindingContext");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[GreenhousePage] UpdateSeedsPanel: failed updating panel {panel.ClassId}: {ex.Message}");
+                panel.SetPanelItemEnabled(seed.Quantity > 0);
             }
         }
     }
@@ -1494,6 +1468,27 @@ public partial class GreenhousePage : ContentPage
     private void UpdateBottomPanel(double adaptiveScale)
     {
         
+    }
+    
+    /// <summary>
+    /// Updates the enabled state of all tools panel buttons based on animation state
+    /// </summary>
+    private void UpdateToolsPanelButtonsState()
+    {
+        bool shouldEnable = _animatingPanelsCount == 0;
+        
+        if (_harvesterButton != null)
+        {
+            _harvesterButton.SetPanelItemEnabled(shouldEnable);
+        }
+        if (_liquidsButton != null)
+        {
+            _liquidsButton.SetPanelItemEnabled(shouldEnable);
+        }
+        if (_seedsButton != null)
+        {
+            _seedsButton.SetPanelItemEnabled(shouldEnable);
+        }
     }
     
     /// <summary>
@@ -1693,8 +1688,8 @@ public partial class GreenhousePage : ContentPage
     {
         try
         {
-            if (_animatingPanels.Count > 0)
-                System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnLiquidsButtonClicked: other panel animations in progress");
+            if (_animatingPanelsCount > 0)
+                return; // Ignore clicks during animations
 
             System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnLiquidsButtonClicked called");
 
@@ -1736,10 +1731,17 @@ public partial class GreenhousePage : ContentPage
             {
                 // Open liquids panel with animation
 #if ANDROID
-                await Task.WhenAll(
-                OpenPanel(true, _liquidsPanel),
-                OpenPanel(true, _selectedLiquidPanel)
-                );
+                if(_selectedLiquid == null)
+                {
+                    await OpenPanel(true, _liquidsPanel);
+                }
+                else
+                {
+                    await Task.WhenAll(
+                    OpenPanel(true, _liquidsPanel),
+                    OpenPanel(true, _selectedLiquidPanel)
+                    );
+                }
 #else
                 await OpenPanel(true, _liquidsPanel);
 #endif
@@ -1769,8 +1771,8 @@ public partial class GreenhousePage : ContentPage
     {
         try
         {
-            if (_animatingPanels.Count > 0)
-                System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnSeedsButtonClicked: other panel animations in progress");
+            if (_animatingPanelsCount > 0)
+                return; // Ignore clicks during animations
             
             System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnSeedsButtonClicked called");
 
@@ -1812,10 +1814,17 @@ public partial class GreenhousePage : ContentPage
             {
                 // Open seeds panel with animation
 #if ANDROID
-                await Task.WhenAll(
-                OpenPanel(true, _seedsPanel),
-                OpenPanel(true, _selectedSeedPanel)
-                );
+                if(_selectedSeed == null)
+                {
+                    await OpenPanel(true, _seedsPanel);
+                }
+                else
+                {
+                    await Task.WhenAll(
+                    OpenPanel(true, _seedsPanel),
+                    OpenPanel(true, _selectedSeedPanel)
+                    );
+                }
 #else
                 await OpenPanel(true, _seedsPanel);
 #endif
@@ -1845,8 +1854,8 @@ public partial class GreenhousePage : ContentPage
     {
         try
         {
-            if (_animatingPanels.Count > 0)
-                System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnHarvesterButtonClicked: other panel animations in progress");
+            if (_animatingPanelsCount > 0)
+                return; // Ignore clicks during animations
 
             System.Diagnostics.Debug.WriteLine("[GreenhousePage] OnHarvesterButtonClicked called");
             System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Button states - harvester:{_harvesterButton != null}, liquids:{_liquidsButton != null}, seeds:{_seedsButton != null}");
@@ -1991,6 +2000,16 @@ public partial class GreenhousePage : ContentPage
     
     private async Task OnLiquidSelected(LiquidData liquid)
     {
+        if (_liquidPanelItems != null)
+        {
+            var panel = _liquidPanelItems.FirstOrDefault(p => p.ClassId == liquid.Id);
+            if (!panel!.ItemIsEnabled)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Tried to select disabled liquid {liquid.Name}");
+                return;
+            }
+        }
+
         // If already selected, clear selection (toggle off)
         if (_selectedLiquid?.Id == liquid.Id)
         {
@@ -2036,6 +2055,7 @@ public partial class GreenhousePage : ContentPage
         // Animate selection on the new panel item
         if (_liquidPanelItems != null)
         {
+            System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Hello {liquid.Name}");
             var newPanel = _liquidPanelItems.FirstOrDefault(p => p.ClassId == liquid.Id);
             if (newPanel != null)
                 newPanel.SetPanelSelected(true, animate: true);
@@ -2054,6 +2074,16 @@ public partial class GreenhousePage : ContentPage
     
     private async Task OnSeedSelected(SeedData seed)
     {
+        if (_seedPanelItems != null)
+        {
+            var panel = _seedPanelItems.FirstOrDefault(p => p.ClassId == seed.Id);
+            if (!panel!.ItemIsEnabled)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GreenhousePage] Tried to select disabled seed {seed.Name}");
+                return;
+            }
+        }
+
         // If already selected, clear selection (toggle off)
         if (_selectedSeed?.Id == seed.Id)
         {
@@ -2123,8 +2153,6 @@ public partial class GreenhousePage : ContentPage
     {
         if (panel == null)
             return;
-        if (_animatingPanels.Contains(panel))
-            return;
 
 #if ANDROID
         // For selected panels on Android, animate the wrapper instead
@@ -2141,7 +2169,8 @@ public partial class GreenhousePage : ContentPage
 
         if (animate)
         {
-            _animatingPanels.Add(panel);
+            _animatingPanelsCount++;
+            UpdateToolsPanelButtonsState();
 
             // Prepare panel for animation
             targetView.Scale = 0;
@@ -2157,7 +2186,8 @@ public partial class GreenhousePage : ContentPage
             // Animate panel
             await targetView.ScaleTo(1, 200, Easing.SpringOut);
 
-            _animatingPanels.Remove(panel);
+            _animatingPanelsCount--;
+            UpdateToolsPanelButtonsState();
         }
         else
         {
@@ -2178,8 +2208,6 @@ public partial class GreenhousePage : ContentPage
     {
         if (panel == null)
             return;
-        if (_animatingPanels.Contains(panel))
-            return;
 
 #if ANDROID
         // For selected panels on Android, animate the wrapper instead
@@ -2196,14 +2224,16 @@ public partial class GreenhousePage : ContentPage
 
         if (animate)
         {
-            _animatingPanels.Add(panel);
+            _animatingPanelsCount++;
+            UpdateToolsPanelButtonsState();
 
             // Animate panel
             await targetView.ScaleTo(0, 200, Easing.SpringIn);
             targetView.IsVisible = false;
             targetView.InputTransparent = true;
 
-            _animatingPanels.Remove(panel);
+            _animatingPanelsCount--;
+            UpdateToolsPanelButtonsState();
         }
         else
         {

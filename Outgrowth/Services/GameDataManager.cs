@@ -203,17 +203,34 @@ public static class GameDataManager
                 System.Diagnostics.Debug.WriteLine($"[GameDataManager] Error applying saved material quantities: {ex.Message}");
             }
 
-            // Ensure player has at least one grass seed on first run if none exist
+            // Ensure player has starter seeds on first run if none exist
             try
             {
                 if (Seeds.IsInitialized)
                 {
+                    bool needsSave = false;
+                    
+                    // Grant 1 grass_seed if player has none
                     var grassSeed = Seeds.Get("grass_seed");
                     if (grassSeed != null && grassSeed.Quantity <= 0)
                     {
                         grassSeed.Quantity = 1;
                         System.Diagnostics.Debug.WriteLine("[GameDataManager] No grass seeds found; granting 1 grass_seed on startup.");
-                        // Persist the granted seed immediately so save files reflect the change
+                        needsSave = true;
+                    }
+                    
+                    // Grant 1 lumivial_seed if player has none
+                    var lumivialSeed = Seeds.Get("lumivial_seed");
+                    if (lumivialSeed != null && lumivialSeed.Quantity <= 0)
+                    {
+                        lumivialSeed.Quantity = 1;
+                        System.Diagnostics.Debug.WriteLine("[GameDataManager] No lumivial seeds found; granting 1 lumivial_seed on startup.");
+                        needsSave = true;
+                    }
+                    
+                    // Persist the granted seeds immediately so save files reflect the change
+                    if (needsSave)
+                    {
                         SaveMaterialsState();
                     }
                 }

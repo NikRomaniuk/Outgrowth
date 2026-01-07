@@ -25,13 +25,16 @@
 
 ```
 Outgrowth/
+├── App.xaml / .cs        # Application entry point and lifecycle events
+├── AppShell.xaml / .cs   # Navigation shell routing configuration
+├── MauiProgram.cs        # App initialization and dependency setup
+├── GlobalXmlns.cs        # Global XAML namespace definitions
 ├── Views/                # XAML pages
 │   ├── HubPage.xaml          # Space station command center
 │   ├── GreenhousePage.xaml   # Plant cultivation area
 │   └── LaboratoryPage.xaml   # Research & breeding facility
 ├── ViewModels/           # MVVM view models with data binding
 │   ├── BaseViewModel.cs      # Base class with INotifyPropertyChanged
-│   ├── MainMenuViewModel.cs  # Main menu logic
 │   ├── HubViewModel.cs       # Hub logic
 │   ├── GreenhouseViewModel.cs # Greenhouse logic
 │   └── LaboratoryViewModel.cs # Laboratory logic
@@ -51,16 +54,25 @@ Outgrowth/
 │   ├── FurnitureObject.cs # Decorative furniture
 │   └── AnimatedPotObject.cs # Animated pot with pulse effect
 ├── Services/             # Application services
-│   ├── GameDataManager.cs      # One-time load of all JSON data libraries
+│   ├── GameDataManager.cs      # One-time load of all JSON data libraries, starter seed grants
 │   ├── NavigationService.cs    # Animated page navigation with fade transitions
 │   ├── ScreenProperties.cs     # Screen size and scale calculations
 │   ├── PersistentTimer.cs      # Timer that persists across app sessions
 │   ├── PlantsManager.cs        # Manages plant growth and cycles
 │   ├── PlantsSaveService.cs    # Saves and loads plant states
 │   ├── MaterialsSaveService.cs # Saves and loads material quantities
-│   └── UserInterfaceCreator.cs # Centralized panel item creation with enable/disable logic
-├── Platforms/            # Platform-specific code
-└── Resources/            # Images, fonts, styles, and other assets
+│   ├── UserInterfaceCreator.cs # Centralized panel item creation with enable/disable logic
+│   └── StyledPanel.cs          # 9-slice pixel-art panels for UI consistency
+├── Platforms/            # Platform-specific code (Android, Windows, iOS, MacCatalyst, Tizen)
+├── Resources/            # Images, fonts, styles, and other assets
+│   ├── AppIcon/          # Application icon assets
+│   ├── Data/             # JSON data libraries (PlantLibrary, SeedLibrary, LiquidLibrary, ResourceLibrary)
+│   ├── Fonts/            # Custom fonts (including Silkscreen for panels)
+│   ├── Images/           # Sprites for plants, pots, seeds, liquids, resources, UI elements
+│   ├── Splash/           # Splash screen assets
+│   └── Styles/           # XAML style definitions (Colors, Styles)
+├── Properties/           # Launch settings and configuration
+└── .github/              # GitHub workflows and Copilot instructions
 ```
 
 ## 🚀 Getting Started
@@ -87,11 +99,6 @@ dotnet build -f net9.0-windows
 dotnet build -f net9.0-android
 ```
 
-## 📚 Documentation
-
-- **[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)** - Full project documentation
-- **[ENVIRONMENT_OBJECTS_ARCHITECTURE.md](ENVIRONMENT_OBJECTS_ARCHITECTURE.md)** - Environment object system architecture
-
 ## ✨ Features
 
 ### Currently Implemented
@@ -112,21 +119,25 @@ dotnet build -f net9.0-android
   - Seeds, liquids, and resources with tracked quantities
   - Items selectable only when quantity > 0
   - Visual feedback for unavailable items (grayed out)
+  - Stage-dependent drops: plants may drop different types and quantities of resources depending on their growth stage
+  - Starter seeds: Players begin with 1 Grass and 1 Lumivial seeds (all availiable)
   - Real-time quantity updates across UI
+  - Easy content authoring: add a sprite to Resources/Images and an entry to the appropriate JSON (SeedLibrary/PlantLibrary/LiquidLibrary/ResourceLibrary) — no code changes required! (There's might be a lot more content, but deadline...)
 - ✅ **Machine & Laboratory Animations**:
   - Machine display with slide-in/out animations
   - Resource selection with visual machine content feedback
-  - Sprite-based display state transitions
+  - Resource extraction: consume resources to produce liquids
+- ✅ **Data Libraries**: One-time load of plants, seeds, liquids, resources from JSON
+- ✅ **UI System**: Pixel-art 9-slice panels with consistent styling across all interfaces
 - ✅ **Data Libraries**: One-time load of plants, seeds, liquids, resources from JSON
 - ✅ **Environment Object System**: Extensible architecture with `EnvObject` base class
   - `PotObject` - Interactive pots with plant slots
   - `PlantObject` - Growing plants with automatic stage progression
   - `StationObject` - Interactive station elements
   - `FurnitureObject` - Decorative furniture items with animations
-  - Interfaces: `IInteractable`, `IAnimated` for extensibility
-- ✅ **Centralized UI Factory**: `UserInterfaceCreator` for consistent panel items with enable/disable system
-- ✅ Responsive design with automatic scaling (16:9 aspect ratio)
-- ✅ Android immersive fullscreen mode
+  - Ilatform-specific input handling (keyboard on Windows, touch on Android)
+- ✅ Persistent save/load for plants, materials, and game state
+- ✅ Optimized UI updates to prevent duplicate element creation
 - ✅ Persistent save/load for plants, materials, and game state
 
 - ✅ Misc fixes and UI improvements (2026-01-02): fixed ResourceItem/ResourceSlot sprite flicker, preloaded MachineDisplay images and cross-faded to prevent flicker, added MachineDisplayContent (resource image + amount), registered Silkscreen fonts for panels, and added debug logs for display animations
@@ -134,6 +145,9 @@ dotnet build -f net9.0-android
 ### Coming Soon
 - Research progression and chemical extraction
 - Trading, quests, and expeditions
+
+### Notes
+- Many additional ideas (quests, breeding(mutating) systems, marketing, plant/resource/liquids/seeds collection overview with descriptions and a bit of lore(there's a descriptions for existingg plants in a JSON though)) were not implemented due to a very short development timeframe (and previous failed project)
 
 ## 🎨 Design
 
@@ -153,5 +167,5 @@ This is an educational project. All rights reserved
 
 ---
 
-**Status**: 🚧 In Active Development | **Last Updated**: January 2, 2026
+**Status**: 🚧 In Active Development | **Last Updated**: January 7, 2026
 

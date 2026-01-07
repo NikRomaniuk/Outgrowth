@@ -78,9 +78,9 @@ public class ScreenProperties
     }
 
     /// <summary>
-    /// Update dynamic resource font sizes based on adaptive scale.
-    /// This centralizes font/size calculations so pages don't duplicate the logic.
-    /// It updates the application-level ResourceDictionary entries used by panels.
+    /// Update dynamic resource font sizes based on adaptive scale
+    /// This centralizes font/size calculations so pages don't duplicate the logic
+    /// It updates the application-level ResourceDictionary entries used by panels
     /// </summary>
     /// <param name="adaptiveScale">Scale factor where 1.0 == Windows 1920px baseline.</param>
     public void UpdateFontSizes(double adaptiveScale)

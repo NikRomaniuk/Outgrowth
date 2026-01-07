@@ -14,7 +14,7 @@ public class StyledPanel : Border
 
     // For selection and panelItem types
     public bool? IsSelected { get; private set; }
-    public bool? ItemIsEnabled { get; private set; }
+    public bool ItemIsEnabled { get; private set; }
     // Stored background panels (used for selection/panelItem)
     private Grid? NormalPanel { get; set; }
     private Grid? HighlightedPanel { get; set; }
@@ -191,6 +191,12 @@ public class StyledPanel : Border
         this.StrokeThickness = 0;
         this.BackgroundColor = Colors.Transparent;
         this.Padding = new Thickness(0);
+
+        // Save bindingContext to this StyledPanel's BindingContext
+        if (bindingContext != null)
+        {
+            this.BindingContext = bindingContext;
+        }
 
         var container = new Grid();
 
@@ -555,46 +561,10 @@ public class StyledPanel : Border
     // Enables or disables this panel when used as a panelItem
     public void SetPanelItemEnabled(bool isEnabled)
     {
-        ItemIsEnabled = isEnabled;
-        
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[StyledPanel] SetPanelItemEnabled called for ClassId='{this.ClassId}' isEnabled={isEnabled}");
-            
-            // CRITICAL: Apply to Panel (Grid) which is the actual interactive element
-            if (Panel != null)
-            {
-                Panel.Opacity = isEnabled ? 1.0 : 0.5;
-                Panel.InputTransparent = !isEnabled;
-                Panel.IsEnabled = isEnabled;
-                
-                System.Diagnostics.Debug.WriteLine($"[StyledPanel] Panel properties set: Opacity={Panel.Opacity}, InputTransparent={Panel.InputTransparent}, IsEnabled={Panel.IsEnabled}");
-            }
-            
-            // Apply to outer Border as well
-            this.IsEnabled = isEnabled;
-            this.InputTransparent = !isEnabled;
-            
-            // Apply to ContentGrid to ensure all child elements are blocked
-            if (ContentGrid != null)
-            {
-                ContentGrid.InputTransparent = !isEnabled;
-                ContentGrid.IsEnabled = isEnabled;
-            }
-            
-            // Apply to all children of Panel recursively
-            if (Panel != null)
-            {
-                foreach (var child in Panel.Children)
-                {
-                    if (child is VisualElement ve)
-                    {
-                        ve.InputTransparent = !isEnabled;
-                    }
-                }
-            }
-            
-            System.Diagnostics.Debug.WriteLine($"[StyledPanel] SetPanelItemEnabled completed for ClassId='{this.ClassId}': Panel.Opacity={Panel?.Opacity}, Panel.InputTransparent={Panel?.InputTransparent}");
+            this.ItemIsEnabled = isEnabled;
+            Panel.Opacity = isEnabled ? 1.0 : 0.5;
         }
         catch (Exception ex)
         {

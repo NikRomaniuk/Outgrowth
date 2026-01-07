@@ -16,13 +16,15 @@ public sealed class WindowsInput
     private readonly Action _onRightArrow;
     private readonly Action? _onEscape;
     private readonly Action? _onE;
+    private readonly Action? _onQ;
 
-    public WindowsInput(Action onLeftArrow, Action onRightArrow, Action? onEscape = null, Action? onE = null)
+    public WindowsInput(Action onLeftArrow, Action onRightArrow, Action? onEscape = null, Action? onE = null, Action? onQ = null)
     {
         _onLeftArrow = onLeftArrow;
         _onRightArrow = onRightArrow;
         _onEscape = onEscape;
         _onE = onE;
+        _onQ = onQ;
     }
 
     public void Attach()
@@ -87,6 +89,11 @@ public sealed class WindowsInput
         else if (e.Key == VirtualKey.E)
         {
             _onE?.Invoke();
+            e.Handled = true;
+        }
+        else if (e.Key == VirtualKey.Q)
+        {
+            _onQ?.Invoke();
             e.Handled = true;
         }
     }
